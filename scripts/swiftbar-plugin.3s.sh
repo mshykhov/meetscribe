@@ -48,8 +48,9 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; t
         fi
     fi
 
-    # Menu bar title
-    echo "REC $elapsed_text | color=#4CAF50 sfSize=13"
+    # Menu bar title with icon
+    ICON_B64=$(cat "$PROJECT_DIR/assets/menubar-icon.b64" 2>/dev/null)
+    echo "$elapsed_text | templateImage=$ICON_B64"
     echo "---"
     if [ -n "$filename" ]; then
         echo "$filename | size=13"
