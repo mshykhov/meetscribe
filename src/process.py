@@ -145,7 +145,13 @@ def transcribe(video_path: str, cfg: dict) -> dict:
         diarize_kwargs = {}
         if cfg["max_speakers"]:
             diarize_kwargs["max_speakers"] = cfg["max_speakers"]
-        diarize_segments = diarize_pipeline(audio, **diarize_kwargs)
+
+        # Pass preloaded waveform dict instead of raw array
+        # ~20x faster than passing file path (pyannote bug #1955)
+        import torch
+        waveform = torch.from_numpy(audio).unsqueeze(0)
+        audio_dict = {"waveform": waveform, "sample_rate": 16000}
+        diarize_segments = diarize_pipeline(audio_dict, **diarize_kwargs)
         result = whisperx.assign_word_speakers(diarize_segments, result)
 
         # Free audio and diarization pipeline
