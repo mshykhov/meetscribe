@@ -61,9 +61,10 @@ case "${1:-install}" in
 
         # SwiftBar menu bar plugin
         SWIFTBAR_DIR="$HOME/Library/Application Support/SwiftBar/Plugins"
-        SWIFTBAR_PLUGIN="$SWIFTBAR_DIR/meeting-pipeline.3s.sh"
-        if [ -d "$SWIFTBAR_DIR" ]; then
-            ln -sf "$PROJECT_DIR/scripts/swiftbar-plugin.3s.sh" "$SWIFTBAR_PLUGIN"
+        if [ -d "/Applications/SwiftBar.app" ]; then
+            mkdir -p "$SWIFTBAR_DIR"
+            ln -sf "$PROJECT_DIR/scripts/swiftbar-plugin.3s.sh" "$SWIFTBAR_DIR/meeting-pipeline.3s.sh"
+            defaults write com.ameba.SwiftBar PluginDirectory "$SWIFTBAR_DIR"
             echo "SwiftBar plugin linked"
         else
             echo "SwiftBar not found - skip menu bar plugin (brew install --cask swiftbar)"
