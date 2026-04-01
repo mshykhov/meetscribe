@@ -158,4 +158,10 @@ find "$WATCH_DIR" -maxdepth 1 -type f \( "${find_args[@]}" \) | while read -r fi
     fi
 done
 
+# If there were failures, touch watch dir to retrigger after ThrottleInterval
+if [ -s "$FAILED_LOG" ]; then
+    sleep 2
+    touch "$WATCH_DIR"
+fi
+
 log "Watch handler finished"
