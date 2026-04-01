@@ -8,7 +8,6 @@ LOCKFILE="/tmp/com.myron.meetscribe.lock.d/pid"
 LOGDIR="$PROJECT_DIR/.logs"
 
 if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; then
-    # Find latest process log
     process_log=$(find "$LOGDIR" -name "process-*.log" -type f 2>/dev/null | sort | tail -1)
 
     # Get current step
@@ -18,13 +17,12 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; t
         if [ -n "$last_step" ]; then
             step="$last_step"
         fi
-        # Check if generating summary
         if grep -q "Generating summary" "$process_log" 2>/dev/null; then
-            step="[5/5] AI Summary..."
+            step="[5/5] AI Summary"
         fi
     fi
 
-    # Get filename being processed
+    # Get filename
     pipeline_log="$LOGDIR/pipeline.log"
     filename=""
     if [ -f "$pipeline_log" ]; then
@@ -48,20 +46,42 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; t
         fi
     fi
 
-    # Menu bar title with icon
+    # Video duration
+    dur_info=""
+    if [ -n "$process_log" ]; then
+        dur_line=$(grep "Video duration:" "$process_log" 2>/dev/null | head -1)
+        if [ -n "$dur_line" ]; then
+            dur_info=$(echo "$dur_line" | sed 's/.*Video duration: //')
+        fi
+    fi
+
+    # Menu bar - just icon, no text
     ICON_B64=$(cat "$PROJECT_DIR/assets/menubar-icon.b64" 2>/dev/null)
-    echo "$elapsed_text | templateImage=$ICON_B64"
+    echo "| templateImage=$ICON_B64"
+
+    # Dropdown
+    echo "---"
+    echo "Meetscribe - Processing | size=14 color=#4CAF50"
     echo "---"
     if [ -n "$filename" ]; then
-        echo "$filename | size=13"
+        echo "$filename | size=12"
     fi
     echo "$step | size=12 color=#4CAF50"
+    if [ -n "$dur_info" ]; then
+        echo "Video: $dur_info | size=11 color=#888888"
+    fi
     if [ -n "$elapsed_text" ]; then
-        echo "Elapsed: $elapsed_text | size=12 color=#888888"
+        echo "Elapsed: $elapsed_text | size=11 color=#888888"
     fi
     echo "---"
-    echo "One video at a time (sequential) | size=11 color=#888888"
-    echo "Open logs | bash='tail' param1='-f' param2='$pipeline_log' terminal=true"
+    # Processed count
+    processed=0
+    [ -f "$PROJECT_DIR/.processed" ] && processed=$(wc -l < "$PROJECT_DIR/.processed" | tr -d ' ')
+    echo "Total processed: $processed videos | size=11 color=#888888"
+    echo "---"
+    echo "Open output folder | bash='open' param1='$HOME/docs/video' terminal=false"
+    echo "Open logs | bash='tail' param1='-f' param2='$LOGDIR/pipeline.log' terminal=true"
+    echo "Health check | bash='$PROJECT_DIR/scripts/install.sh' param1='health' terminal=true"
 else
     exit 0
 fi
