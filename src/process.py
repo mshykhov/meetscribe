@@ -79,6 +79,28 @@ def load_config() -> dict:
     }
 
 
+def get_recording_date(video_path: str) -> str:
+    """Get recording date from video metadata, file mtime, or current time."""
+    # Try creation_time from video metadata
+    result = subprocess.run(
+        ["ffprobe", "-v", "quiet", "-show_entries", "format_tags=creation_time",
+         "-of", "default=noprint_wrappers=1:nokey=1", video_path],
+        capture_output=True, text=True,
+    )
+    ts = result.stdout.strip().split("\n")[0] if result.stdout.strip() else ""
+    if ts and "T" in ts:
+        return ts[:10]  # "2026-04-01T07:02:53..." -> "2026-04-01"
+
+    # Fallback: file modification time
+    try:
+        mtime = Path(video_path).stat().st_mtime
+        return datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+    except OSError:
+        pass
+
+    return datetime.now().strftime("%Y-%m-%d")
+
+
 def get_audio_duration(video_path: str) -> float:
     result = subprocess.run(
         ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
@@ -307,7 +329,7 @@ def organize_files(
 
 def process_video(video_path: str) -> Path:
     cfg = load_config()
-    date_str = datetime.now().strftime("%Y-%m-%d")
+    date_str = get_recording_date(video_path)
 
     print(f"Processing: {video_path}")
     print("=" * 60)
