@@ -270,6 +270,51 @@ class TestWatchHandler:
         assert "ACQUIRED_AFTER_CLEANUP" in result.stdout
 
 
+# --- Tests: Duplicate output handling ---
+
+class TestDuplicateOutput:
+    def test_duplicate_folder_gets_suffix(self, tmp_path):
+        """If output folder already exists, new one gets -2 suffix."""
+        from src.process import organize_files
+
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        # Create existing folder
+        existing = output_dir / "2026-04-01-sprint-review"
+        existing.mkdir()
+        (existing / "2026-04-01-sprint-review.mp4").write_bytes(b"old")
+
+        # Create a fake video to process
+        video = tmp_path / "test.mp4"
+        video.write_bytes(b"fake video content")
+
+        cfg = {"output_dir": output_dir}
+        summary = "### Короткое название\nsprint review\n\n### Тема\ntest"
+
+        result = organize_files(str(video), "transcript", summary, "2026-04-01", cfg)
+
+        assert result.name == "2026-04-01-sprint-review-2"
+        assert (result / "2026-04-01-sprint-review-2-transcript.txt").exists()
+
+    def test_no_suffix_when_no_conflict(self, tmp_path):
+        """No suffix when output folder doesn't exist yet."""
+        from src.process import organize_files
+
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        video = tmp_path / "test.mp4"
+        video.write_bytes(b"fake video content")
+
+        cfg = {"output_dir": output_dir}
+        summary = "### Короткое название\nunique-meeting\n\n### Тема\ntest"
+
+        result = organize_files(str(video), "transcript", summary, "2026-04-01", cfg)
+
+        assert result.name == "2026-04-01-unique-meeting"
+
+
 # --- Tests: Output directory protection ---
 
 class TestSafetyGuards:

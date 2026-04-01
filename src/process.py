@@ -265,7 +265,15 @@ def organize_files(
     topic = extract_topic(summary)
     folder_name = f"{date_str}-{topic}"
 
+    # Avoid overwriting existing output (e.g. duplicate video name)
     output_dir = cfg["output_dir"] / folder_name
+    if output_dir.exists():
+        for i in range(2, 100):
+            candidate = cfg["output_dir"] / f"{folder_name}-{i}"
+            if not candidate.exists():
+                output_dir = candidate
+                folder_name = f"{folder_name}-{i}"
+                break
     output_dir.mkdir(parents=True, exist_ok=True)
 
     base_name = folder_name
