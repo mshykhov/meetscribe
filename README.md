@@ -22,7 +22,8 @@ Transcripts include timestamps and speaker labels. Summaries include meeting top
 - macOS (Apple Silicon recommended)
 - Python 3.10+
 - ffmpeg
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)
+- [Claude Code](https://claude.ai/code) CLI (requires subscription)
+- terminal-notifier (for macOS notifications)
 - [SwiftBar](https://github.com/swiftbar/SwiftBar) (optional, menu bar status)
 
 ## Installation
@@ -64,7 +65,7 @@ cp .env.example .env
 
 All settings in `.env` (see `.env.example`). Key options:
 
-- `HF_TOKEN` - HuggingFace token for speaker diarization (required)
+- `HF_TOKEN` - HuggingFace token for speaker diarization (required for identifying who speaks)
 - `WATCH_DIR` - folder to monitor for new recordings
 - `OUTPUT_DIR` - where processed meetings go
 - `WHISPER_MODEL` - model size (tiny/base/small/medium/large-v2/large-v3)
