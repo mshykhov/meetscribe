@@ -26,7 +26,7 @@ notify() {
     local message="$2"
     local sound="${3:-default}"
     terminal-notifier -title "$title" -message "$message" -sound "$sound" -group "meetscribe" \
-        -appIcon "$PROJECT_DIR/assets/icon.png" 2>/dev/null || true
+        -contentImage "$PROJECT_DIR/assets/icon.png" -appIcon "$PROJECT_DIR/assets/icon.png" 2>/dev/null || true
 }
 
 # Atomic lock via mkdir (POSIX atomic operation)
