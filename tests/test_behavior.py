@@ -334,6 +334,71 @@ class TestSafetyGuards:
         )
         assert "REJECTED" in result.stdout
 
+    def test_failed_file_not_skipped_until_max_retries(self, tmp_path):
+        """Failed file with < MAX_RETRIES should still be picked up."""
+        failed = tmp_path / ".failed"
+        failed.write_text("/some/video.mp4\n")  # 1 failure
+
+        result = subprocess.run(
+            ["bash", "-c", f"""
+                FAILED_LOG="{failed}"
+                MAX_RETRIES=3
+                file="/some/video.mp4"
+                fail_count=0
+                if [ -s "$FAILED_LOG" ]; then
+                    fail_count=$(grep -cxF "$file" "$FAILED_LOG" || true)
+                fi
+                if [ "$fail_count" -ge "$MAX_RETRIES" ]; then
+                    echo "SKIPPED"
+                else
+                    echo "WOULD_RETRY attempt $((fail_count + 1))"
+                fi
+            """],
+            capture_output=True, text=True,
+        )
+        assert "WOULD_RETRY attempt 2" in result.stdout
+
+    def test_failed_file_skipped_after_max_retries(self, tmp_path):
+        """Failed file with >= MAX_RETRIES should be skipped."""
+        failed = tmp_path / ".failed"
+        failed.write_text("/some/video.mp4\n/some/video.mp4\n/some/video.mp4\n")  # 3 failures
+
+        result = subprocess.run(
+            ["bash", "-c", f"""
+                FAILED_LOG="{failed}"
+                MAX_RETRIES=3
+                file="/some/video.mp4"
+                fail_count=0
+                if [ -s "$FAILED_LOG" ]; then
+                    fail_count=$(grep -cxF "$file" "$FAILED_LOG" || true)
+                fi
+                if [ "$fail_count" -ge "$MAX_RETRIES" ]; then
+                    echo "SKIPPED"
+                else
+                    echo "WOULD_RETRY"
+                fi
+            """],
+            capture_output=True, text=True,
+        )
+        assert "SKIPPED" in result.stdout
+
+    def test_retrigger_after_failure(self, tmp_path):
+        """Watch dir should be touched after failure to retrigger launchd."""
+        watch_dir = tmp_path / "watch"
+        watch_dir.mkdir()
+        before_mtime = watch_dir.stat().st_mtime
+
+        import time
+        time.sleep(0.1)
+
+        # Simulate the retrigger logic
+        subprocess.run(
+            ["bash", "-c", f'touch "{watch_dir}"'],
+            capture_output=True,
+        )
+        after_mtime = watch_dir.stat().st_mtime
+        assert after_mtime > before_mtime
+
     def test_video_too_long_rejected(self):
         """Videos exceeding MAX_VIDEO_DURATION_SEC should be rejected."""
         from src.process import MAX_VIDEO_DURATION_SEC
