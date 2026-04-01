@@ -15,6 +15,10 @@ import whisperx
 from dotenv import load_dotenv
 from whisperx.diarize import DiarizationPipeline
 
+# Use cached models without network check (faster startup, works offline)
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
 SUMMARY_PROMPT = """Ты - ассистент для анализа записей встреч.
 
 Проанализируй транскрипцию встречи и создай структурированное саммари на русском языке:
