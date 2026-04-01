@@ -14,7 +14,7 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; t
     # Get current step
     step="Starting..."
     if [ -n "$process_log" ]; then
-        last_step=$(grep -o '\[[1-4]/4\].*' "$process_log" 2>/dev/null | tail -1)
+        last_step=$(grep -o '\[[1-4]/4\] [A-Za-z]*' "$process_log" 2>/dev/null | tail -1)
         if [ -n "$last_step" ]; then
             step="$last_step"
         fi
