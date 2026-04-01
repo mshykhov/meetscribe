@@ -49,7 +49,7 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; t
     fi
 
     # Menu bar title
-    echo ":waveform: $elapsed_text | sfSymbol=true sfColor=#4CAF50 sfSize=14"
+    echo "REC $elapsed_text | color=#4CAF50 sfSize=13"
     echo "---"
     if [ -n "$filename" ]; then
         echo "$filename | size=13"
