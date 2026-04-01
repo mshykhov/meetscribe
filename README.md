@@ -95,6 +95,28 @@ cp .env.example .env
 | Menu bar | SwiftBar |
 | Notifications | terminal-notifier |
 
+## Querying your meetings with AI
+
+All processed meetings are stored in `~/docs/video/` as plain text files. Any AI tool (Claude Code, etc.) can search and read them directly.
+
+**Example queries:**
+```
+"Find where we discussed API authorization"     → grep across transcripts
+"What are my action items from last week?"       → read recent summary.md files
+"What was decided on the April 1st meeting?"     → read specific summary
+"When did someone mention the deadline for X?"   → grep transcript, get timestamp, find in video
+```
+
+**Output structure per meeting:**
+```
+~/docs/video/2026-04-01-sprint-review/
+├── 2026-04-01-sprint-review.mp4              # video
+├── 2026-04-01-sprint-review-transcript.txt   # timestamped transcript with speakers
+└── 2026-04-01-sprint-review-summary.md       # structured summary + action items
+```
+
+Transcripts include timestamps (`[01:30:45] SPEAKER_00: ...`) so you can jump to the exact moment in the video.
+
 ## Notes
 
 - MPS (Metal GPU) is not supported by CTranslate2 - runs on CPU with int8 quantization
