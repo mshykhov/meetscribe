@@ -27,3 +27,9 @@ if [ -n "$current_file" ]; then
     echo "$current_file" >> "$PROCESSED_LOG"
     echo "Skipped: $current_file"
 fi
+
+# Touch watch dir to trigger processing of remaining files
+WATCH_DIR="$(grep '^WATCH_DIR=' "$PROJECT_DIR/.env" 2>/dev/null | cut -d= -f2-)"
+WATCH_DIR="${WATCH_DIR:-$HOME/Videos/OBS}"
+sleep 1
+touch "$WATCH_DIR"

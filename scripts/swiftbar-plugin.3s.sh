@@ -88,6 +88,14 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; t
     fi
     echo "$progress | size=12 font=Menlo"
     echo "$step_name | size=12 color=#4CAF50"
+    # Step descriptions
+    case "$step_num" in
+        1) echo "Loading whisper model into memory | size=10 color=#666666" ;;
+        2) echo "Speech recognition (speech to text) | size=10 color=#666666" ;;
+        3) echo "Word-level timestamp alignment | size=10 color=#666666" ;;
+        4) echo "Identifying who is speaking | size=10 color=#666666" ;;
+        5) echo "Claude generating summary + action items | size=10 color=#666666" ;;
+    esac
     if [ -n "$dur_info" ]; then
         echo "Video: $dur_info | size=11 color=#888888"
     fi
@@ -101,7 +109,7 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; t
     echo "Total processed: $processed videos | size=11 color=#888888"
     echo "---"
     echo "Skip this video | bash='$PROJECT_DIR/scripts/skip-current.sh' terminal=false refresh=true color=#FF9800"
-    echo "Cancel processing | bash='kill' param1=$(cat "$LOCKFILE" 2>/dev/null) terminal=false refresh=true color=#FF6B6B"
+    echo "Cancel (will retry) | bash='$PROJECT_DIR/scripts/cancel-current.sh' terminal=false refresh=true color=#FF6B6B"
     echo "---"
     echo "Open output folder | bash='open' param1='$HOME/docs/video' terminal=false"
     echo "Open logs | bash='tail' param1='-f' param2='$LOGDIR/pipeline.log' terminal=true"
