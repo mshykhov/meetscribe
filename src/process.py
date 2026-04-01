@@ -15,9 +15,9 @@ import whisperx
 from dotenv import load_dotenv
 from whisperx.diarize import DiarizationPipeline
 
-# Use cached models without network check (faster startup, works offline)
-os.environ.setdefault("HF_HUB_OFFLINE", "1")
-os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+# Use cached models, skip update checks
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "true")
 
 SUMMARY_PROMPT = """Ты - ассистент для анализа записей встреч.
 
