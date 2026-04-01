@@ -15,7 +15,7 @@ OUTPUT_DIR="$(grep '^OUTPUT_DIR=' "$PROJECT_DIR/.env" 2>/dev/null | cut -d= -f2-
 OUTPUT_DIR="${OUTPUT_DIR:-$HOME/docs/video}"
 PROCESSED_LOG="$PROJECT_DIR/.processed"
 FAILED_LOG="$PROJECT_DIR/.failed"
-LOCKDIR="/tmp/com.myron.meeting-pipeline.lock.d"
+LOCKDIR="/tmp/com.myron.meetscribe.lock.d"
 MAX_RETRIES=3
 EXTENSIONS="mkv mp4 webm flv mov avi"
 
@@ -25,7 +25,7 @@ notify() {
     local title="$1"
     local message="$2"
     local sound="${3:-default}"
-    terminal-notifier -title "$title" -message "$message" -sound "$sound" -group "meeting-pipeline" 2>/dev/null || true
+    terminal-notifier -title "$title" -message "$message" -sound "$sound" -group "meetscribe" 2>/dev/null || true
 }
 
 # Atomic lock via mkdir (POSIX atomic operation)
@@ -54,7 +54,7 @@ real_watch="$(cd "$WATCH_DIR" 2>/dev/null && pwd -P || echo "$WATCH_DIR")"
 real_output="$(cd "$OUTPUT_DIR" 2>/dev/null && pwd -P || echo "$OUTPUT_DIR")"
 if [ "$real_watch" = "$real_output" ]; then
     log "ERROR: WATCH_DIR and OUTPUT_DIR are the same directory! Aborting."
-    notify "Meeting Pipeline" "ОШИБКА: WATCH_DIR == OUTPUT_DIR!" "Basso"
+    notify "Meetscribe" "ОШИБКА: WATCH_DIR == OUTPUT_DIR!" "Basso"
     exit 1
 fi
 
@@ -90,20 +90,20 @@ find "$WATCH_DIR" -maxdepth 1 -type f \( "${find_args[@]}" \) | while read -r fi
 
     filename="$(basename "$file")"
     log "New file detected: $file (attempt $((fail_count + 1))/$MAX_RETRIES)"
-    notify "Meeting Pipeline" "Новая запись: $filename" "Blow"
+    notify "Meetscribe" "Новая запись: $filename" "Blow"
 
     # Wait for recording to finish (OBS holds file open)
     wait_count=0
     while lsof -- "$file" >/dev/null 2>&1; do
         if [ $wait_count -eq 0 ]; then
             log "File still being recorded, waiting..."
-            notify "Meeting Pipeline" "Запись идет, жду завершения..." "Blow"
+            notify "Meetscribe" "Запись идет, жду завершения..." "Blow"
         fi
         sleep 10
         wait_count=$((wait_count + 1))
         if [ $wait_count -ge 360 ]; then
             log "ERROR: Timeout waiting for file after 1 hour: $file"
-            notify "Meeting Pipeline" "ОШИБКА: таймаут записи $filename" "Basso"
+            notify "Meetscribe" "ОШИБКА: таймаут записи $filename" "Basso"
             continue 2
         fi
     done
@@ -117,7 +117,7 @@ find "$WATCH_DIR" -maxdepth 1 -type f \( "${find_args[@]}" \) | while read -r fi
     dur_sec=$(ffprobe -v quiet -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$file" 2>/dev/null | cut -d. -f1)
     if [ -z "$dur_sec" ] || ! [ "$dur_sec" -ge 5 ] 2>/dev/null; then
         log "SKIP: File too short or corrupted: $file (${dur_sec:-0}s)"
-        notify "Meeting Pipeline" "Пропущен битый/короткий файл: $filename" "Basso"
+        notify "Meetscribe" "Пропущен битый/короткий файл: $filename" "Basso"
         echo "$file" >> "$PROCESSED_LOG"
         continue
     fi
@@ -127,7 +127,7 @@ find "$WATCH_DIR" -maxdepth 1 -type f \( "${find_args[@]}" \) | while read -r fi
     dur_min=$(( dur_sec / 60 ))
     est_min=$(( dur_min / 5 ))
     [ "$est_min" -lt 1 ] && est_min=1
-    notify "Meeting Pipeline" "Обработка ${dur_min}м видео (ETA ~${est_min}м)..." "Blow"
+    notify "Meetscribe" "Обработка ${dur_min}м видео (ETA ~${est_min}м)..." "Blow"
     start_time=$(date +%s)
 
     process_log="$PROJECT_DIR/.logs/process-$(date +%s).log"
@@ -139,7 +139,7 @@ find "$WATCH_DIR" -maxdepth 1 -type f \( "${find_args[@]}" \) | while read -r fi
 
         output_dir=$(grep "Done! Output:" "$process_log" | sed 's/.*Output: //')
         log "Done: $file (${mins}m ${secs}s) -> $(basename "$output_dir")"
-        notify "Meeting Pipeline" "Готово за ${mins}м ${secs}с! $(basename "$output_dir")" "Glass"
+        notify "Meetscribe" "Готово за ${mins}м ${secs}с! $(basename "$output_dir")" "Glass"
     else
         echo "$file" >> "$FAILED_LOG"
         fail_count=$((fail_count + 1))
@@ -147,9 +147,9 @@ find "$WATCH_DIR" -maxdepth 1 -type f \( "${find_args[@]}" \) | while read -r fi
         log "See details: $process_log"
         tail -5 "$process_log" | while read -r line; do log "  $line"; done
         if [ "$fail_count" -ge "$MAX_RETRIES" ]; then
-            notify "Meeting Pipeline" "ОШИБКА: $filename провалился $MAX_RETRIES раз. Пропущен." "Basso"
+            notify "Meetscribe" "ОШИБКА: $filename провалился $MAX_RETRIES раз. Пропущен." "Basso"
         else
-            notify "Meeting Pipeline" "ОШИБКА: $filename (попытка $fail_count/$MAX_RETRIES)" "Basso"
+            notify "Meetscribe" "ОШИБКА: $filename (попытка $fail_count/$MAX_RETRIES)" "Basso"
         fi
     fi
 done

@@ -1,16 +1,16 @@
 #!/bin/bash
-# Install/uninstall the meeting-pipeline launchd service
+# Install/uninstall the meetscribe launchd service
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PLIST_NAME="com.myron.meeting-pipeline"
+PLIST_NAME="com.myron.meetscribe"
 PLIST_SRC="$PROJECT_DIR/$PLIST_NAME.plist"
 PLIST_DST="$HOME/Library/LaunchAgents/$PLIST_NAME.plist"
 DOMAIN="gui/$(id -u)"
 
 case "${1:-install}" in
     install)
-        echo "=== Meeting Pipeline Installer ==="
+        echo "=== Meetscribe Installer ==="
 
         # Check prerequisites
         if [ ! -f "$PROJECT_DIR/.env" ]; then
@@ -63,7 +63,7 @@ case "${1:-install}" in
         SWIFTBAR_DIR="$HOME/Library/Application Support/SwiftBar/Plugins"
         if [ -d "/Applications/SwiftBar.app" ]; then
             mkdir -p "$SWIFTBAR_DIR"
-            ln -sf "$PROJECT_DIR/scripts/swiftbar-plugin.3s.sh" "$SWIFTBAR_DIR/meeting-pipeline.3s.sh"
+            ln -sf "$PROJECT_DIR/scripts/swiftbar-plugin.3s.sh" "$SWIFTBAR_DIR/meetscribe.3s.sh"
             defaults write com.ameba.SwiftBar PluginDirectory "$SWIFTBAR_DIR"
             echo "SwiftBar plugin linked"
         else
@@ -76,7 +76,7 @@ case "${1:-install}" in
         ;;
 
     uninstall)
-        echo "Uninstalling meeting-pipeline..."
+        echo "Uninstalling meetscribe..."
         launchctl bootout "$DOMAIN/$PLIST_NAME" 2>/dev/null || true
         rm -f "$PLIST_DST"
         echo "Done."
@@ -91,7 +91,7 @@ case "${1:-install}" in
         ;;
 
     health)
-        echo "=== Meeting Pipeline Health Check ==="
+        echo "=== Meetscribe Health Check ==="
         ok=true
 
         # 1. launchd service

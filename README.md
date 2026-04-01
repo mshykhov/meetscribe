@@ -1,4 +1,4 @@
-# Meeting Pipeline
+# Meetscribe
 
 Automated meeting video processing on macOS. Records go in, transcripts and summaries come out.
 
@@ -32,7 +32,7 @@ Transcripts include timestamps and speaker labels. Summaries include meeting top
 brew install python@3.12 ffmpeg terminal-notifier
 brew install --cask swiftbar  # optional
 
-git clone <repo-url> && cd meeting-pipeline
+git clone <repo-url> && cd meetscribe
 python3.12 -m venv .venv
 .venv/bin/pip install -e .
 

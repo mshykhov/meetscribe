@@ -3,8 +3,8 @@
 # <swiftbar.hideRunInTerminal>true</swiftbar.hideRunInTerminal>
 # <swiftbar.hideDisablePlugin>true</swiftbar.hideDisablePlugin>
 
-PROJECT_DIR="$HOME/projects/meeting-pipeline"
-LOCKFILE="/tmp/com.myron.meeting-pipeline.lock"
+PROJECT_DIR="$HOME/projects/meetscribe"
+LOCKFILE="/tmp/com.myron.meetscribe.lock"
 LOG="$PROJECT_DIR/.logs/pipeline.log"
 PROCESSED="$PROJECT_DIR/.processed"
 

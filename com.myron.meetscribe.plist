@@ -4,11 +4,11 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.myron.meeting-pipeline</string>
+    <string>com.myron.meetscribe</string>
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/myron/projects/meeting-pipeline/scripts/watch-handler.sh</string>
+        <string>/Users/myron/projects/meetscribe/scripts/watch-handler.sh</string>
     </array>
 
     <key>WatchPaths</key>
@@ -29,10 +29,10 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/myron/projects/meeting-pipeline/.logs/pipeline.log</string>
+    <string>/Users/myron/projects/meetscribe/.logs/pipeline.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/myron/projects/meeting-pipeline/.logs/pipeline.log</string>
+    <string>/Users/myron/projects/meetscribe/.logs/pipeline.log</string>
 
     <key>EnvironmentVariables</key>
     <dict>

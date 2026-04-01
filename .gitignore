@@ -1,8 +1,10 @@
-.env
-__pycache__/
-*.pyc
-.venv/
 *.egg-info/
-dist/
-build/
+*.pyc
+.env
+.failed
 .logs/
+.processed
+.venv/
+__pycache__/
+build/
+dist/
