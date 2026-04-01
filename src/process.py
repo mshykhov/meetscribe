@@ -259,7 +259,7 @@ def sanitize_filename(name: str) -> str:
 
 
 def organize_files(
-    video_path: str, transcript: str, summary: str, date_str: str, cfg: dict
+    video_path: str, transcript: str, summary: str, date_str: str, cfg: dict,
 ) -> Path:
     video = Path(video_path)
     topic = extract_topic(summary)
@@ -279,15 +279,17 @@ def organize_files(
     summary_dest.write_text(summary, encoding="utf-8")
     print(f"Saved summary: {summary_dest}")
 
+    # Safe move: copy first, delete after success
     print(f"Moving video to {video_dest}")
-    shutil.move(str(video), str(video_dest))
+    shutil.copy2(str(video), str(video_dest))
+    video.unlink()
 
     return output_dir
 
 
 def process_video(video_path: str) -> Path:
     cfg = load_config()
-    date_str = datetime.now().strftime("%Y-%m-%d")  # fix date at start
+    date_str = datetime.now().strftime("%Y-%m-%d")
 
     print(f"Processing: {video_path}")
     print("=" * 60)
@@ -297,7 +299,6 @@ def process_video(video_path: str) -> Path:
 
     print(f"\nTranscript: {len(result['segments'])} segments")
 
-    # Save transcript immediately (even if summary fails later)
     tmp_transcript = cfg["output_dir"] / f".tmp-{date_str}-transcript.txt"
     tmp_transcript.parent.mkdir(parents=True, exist_ok=True)
     tmp_transcript.write_text(transcript, encoding="utf-8")
