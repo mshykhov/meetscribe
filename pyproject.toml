@@ -1,0 +1,12 @@
+[project]
+name = "meeting-pipeline"
+version = "0.1.0"
+description = "Automated meeting video transcription, diarization, and summarization pipeline"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "whisperx",
+    "python-dotenv",
+]
+
+[project.scripts]
+meeting-pipeline = "src.process:main"
