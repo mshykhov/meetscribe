@@ -100,6 +100,7 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; t
     [ -f "$PROJECT_DIR/.processed" ] && processed=$(wc -l < "$PROJECT_DIR/.processed" | tr -d ' ')
     echo "Total processed: $processed videos | size=11 color=#888888"
     echo "---"
+    echo "Skip this video | bash='$PROJECT_DIR/scripts/skip-current.sh' terminal=false refresh=true color=#FF9800"
     echo "Cancel processing | bash='kill' param1=$(cat "$LOCKFILE" 2>/dev/null) terminal=false refresh=true color=#FF6B6B"
     echo "---"
     echo "Open output folder | bash='open' param1='$HOME/docs/video' terminal=false"
