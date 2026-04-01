@@ -4,7 +4,7 @@
 # <swiftbar.hideDisablePlugin>true</swiftbar.hideDisablePlugin>
 
 PROJECT_DIR="$HOME/projects/meetscribe"
-LOCKFILE="/tmp/com.myron.meetscribe.lock"
+LOCKFILE="/tmp/com.myron.meetscribe.lock.d/pid"
 LOG="$PROJECT_DIR/.logs/pipeline.log"
 PROCESSED="$PROJECT_DIR/.processed"
 
