@@ -15,7 +15,7 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; t
     if [ -z "$step" ]; then
         step="Processing..."
     fi
-    echo "🎙 Processing"
+    echo ":waveform: | sfSymbol=true sfColor=#4CAF50 sfSize=14"
     echo "---"
     echo "Processing meeting | color=#4CAF50"
     echo "$step | size=12"
