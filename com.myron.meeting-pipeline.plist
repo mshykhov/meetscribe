@@ -16,6 +16,9 @@
         <string>/Users/myron/Videos/OBS</string>
     </array>
 
+    <key>RunAtLoad</key>
+    <true/>
+
     <key>ThrottleInterval</key>
     <integer>30</integer>
 
@@ -34,7 +37,9 @@
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <string>/opt/homebrew/bin:/opt/homebrew/opt/ffmpeg/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/myron</string>
     </dict>
 </dict>
 </plist>

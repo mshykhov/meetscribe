@@ -5,6 +5,7 @@ import argparse
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 from datetime import datetime
@@ -48,8 +49,17 @@ SUMMARY_PROMPT = """Ты - ассистент для анализа записе
 
 """
 
-# ~4 chars per token, leave room for prompt + response
 MAX_TRANSCRIPT_CHARS = 600_000
+MAX_VIDEO_DURATION_SEC = 4 * 3600  # 4 hours hard limit
+WHISPERX_TIMEOUT_SEC = 3600  # 1 hour max for transcription
+
+
+class TranscriptionTimeout(Exception):
+    pass
+
+
+def _timeout_handler(signum, frame):
+    raise TranscriptionTimeout("Transcription timed out")
 
 
 def load_config() -> dict:
@@ -80,41 +90,66 @@ def get_audio_duration(video_path: str) -> float:
 def transcribe(video_path: str, cfg: dict) -> dict:
     duration = get_audio_duration(video_path)
     duration_min = int(duration // 60)
-    est_min = max(1, int(duration / 60 * 0.2))  # ~5x realtime estimate
+
+    if duration > MAX_VIDEO_DURATION_SEC:
+        raise ValueError(
+            f"Video too long: {duration_min}m (max {MAX_VIDEO_DURATION_SEC // 60}m). "
+            f"Split the video first."
+        )
+
+    est_min = max(1, int(duration / 60 * 0.2))
     print(f"Video duration: {duration_min}m, estimated processing: ~{est_min}m")
 
-    print(f"[1/4] Loading model: {cfg['whisper_model']}...")
-    model = whisperx.load_model(
-        cfg["whisper_model"],
-        device="cpu",
-        compute_type="int8",
-        language=cfg["language"],
-    )
+    # Set timeout for entire transcription
+    old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+    signal.alarm(WHISPERX_TIMEOUT_SEC)
 
-    print(f"[2/4] Transcribing: {video_path}")
-    audio = whisperx.load_audio(video_path)
-    result = model.transcribe(audio, batch_size=4, print_progress=True)
-    language = result["language"]
-    print(f"       Detected language: {language}")
+    try:
+        print(f"[1/4] Loading model: {cfg['whisper_model']}...")
+        model = whisperx.load_model(
+            cfg["whisper_model"],
+            device="cpu",
+            compute_type="int8",
+            language=cfg["language"],
+        )
 
-    print("[3/4] Aligning words...")
-    align_model, metadata = whisperx.load_align_model(
-        language_code=language, device="cpu"
-    )
-    result = whisperx.align(
-        result["segments"], align_model, metadata, audio, device="cpu",
-        print_progress=True,
-    )
+        print(f"[2/4] Transcribing: {video_path}")
+        audio = whisperx.load_audio(video_path)
+        result = model.transcribe(audio, batch_size=4, print_progress=True)
+        language = result["language"]
+        print(f"       Detected language: {language}")
 
-    print("[4/4] Diarizing speakers...")
-    diarize_pipeline = DiarizationPipeline(
-        token=cfg["hf_token"], device="cpu"
-    )
-    diarize_kwargs = {}
-    if cfg["max_speakers"]:
-        diarize_kwargs["max_speakers"] = cfg["max_speakers"]
-    diarize_segments = diarize_pipeline(audio, **diarize_kwargs)
-    result = whisperx.assign_word_speakers(diarize_segments, result)
+        # Free model memory before alignment
+        del model
+
+        print("[3/4] Aligning words...")
+        align_model, metadata = whisperx.load_align_model(
+            language_code=language, device="cpu"
+        )
+        result = whisperx.align(
+            result["segments"], align_model, metadata, audio, device="cpu",
+            print_progress=True,
+        )
+
+        # Free alignment model before diarization
+        del align_model
+
+        print("[4/4] Diarizing speakers...")
+        diarize_pipeline = DiarizationPipeline(
+            token=cfg["hf_token"], device="cpu"
+        )
+        diarize_kwargs = {}
+        if cfg["max_speakers"]:
+            diarize_kwargs["max_speakers"] = cfg["max_speakers"]
+        diarize_segments = diarize_pipeline(audio, **diarize_kwargs)
+        result = whisperx.assign_word_speakers(diarize_segments, result)
+
+        # Free audio and diarization pipeline
+        del audio, diarize_pipeline
+
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
 
     return result
 
@@ -139,7 +174,6 @@ def build_transcript(result: dict) -> str:
 
 
 def call_claude(prompt: str, cfg: dict, timeout: int = 600) -> str:
-    # Use stdin to avoid ARG_MAX limit (~256KB on macOS)
     result = subprocess.run(
         [cfg["claude_cli"], "-p", "-", "--model", cfg["claude_model"]],
         input=prompt, capture_output=True, text=True, timeout=timeout,
@@ -153,7 +187,6 @@ def generate_summary(transcript: str, cfg: dict) -> str:
     if len(transcript) <= MAX_TRANSCRIPT_CHARS:
         return call_claude(SUMMARY_PROMPT + transcript, cfg)
 
-    # Chunk long transcripts
     print(f"Transcript too long ({len(transcript)} chars), splitting into chunks...")
     lines = transcript.split("\n")
     chunks = []
@@ -226,10 +259,9 @@ def sanitize_filename(name: str) -> str:
 
 
 def organize_files(
-    video_path: str, transcript: str, summary: str, cfg: dict
+    video_path: str, transcript: str, summary: str, date_str: str, cfg: dict
 ) -> Path:
     video = Path(video_path)
-    date_str = datetime.now().strftime("%Y-%m-%d")
     topic = extract_topic(summary)
     folder_name = f"{date_str}-{topic}"
 
@@ -241,7 +273,6 @@ def organize_files(
     transcript_dest = output_dir / f"{base_name}-transcript.txt"
     summary_dest = output_dir / f"{base_name}-summary.md"
 
-    # Save text files first (before moving video - safer on disk full errors)
     transcript_dest.write_text(transcript, encoding="utf-8")
     print(f"Saved transcript: {transcript_dest}")
 
@@ -256,6 +287,7 @@ def organize_files(
 
 def process_video(video_path: str) -> Path:
     cfg = load_config()
+    date_str = datetime.now().strftime("%Y-%m-%d")  # fix date at start
 
     print(f"Processing: {video_path}")
     print("=" * 60)
@@ -265,25 +297,23 @@ def process_video(video_path: str) -> Path:
 
     print(f"\nTranscript: {len(result['segments'])} segments")
 
-    # Always save transcript first (even if summary fails)
-    video = Path(video_path)
-    date_str = datetime.now().strftime("%Y-%m-%d")
+    # Save transcript immediately (even if summary fails later)
     tmp_transcript = cfg["output_dir"] / f".tmp-{date_str}-transcript.txt"
     tmp_transcript.parent.mkdir(parents=True, exist_ok=True)
     tmp_transcript.write_text(transcript, encoding="utf-8")
-    print(f"Transcript saved to temp: {tmp_transcript}")
 
     print("Generating summary with Claude...")
     try:
         summary = generate_summary(transcript, cfg)
     except Exception as e:
         print(f"WARNING: Summary generation failed: {e}")
-        print("Saving transcript without summary...")
-        summary = f"### Короткое название\n`meeting`\n\n### Summary unavailable\n\nError: {e}\n\nTranscript was saved successfully."
+        summary = (
+            "### Короткое название\nmeeting\n\n"
+            f"### Summary unavailable\n\nError: {e}\n\n"
+            "Transcript was saved successfully."
+        )
 
-    output_dir = organize_files(video_path, transcript, summary, cfg)
-
-    # Cleanup temp transcript
+    output_dir = organize_files(video_path, transcript, summary, date_str, cfg)
     tmp_transcript.unlink(missing_ok=True)
 
     print("=" * 60)

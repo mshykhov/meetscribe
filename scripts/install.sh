@@ -138,11 +138,18 @@ case "${1:-install}" in
         # 6. claude CLI
         claude_cli=$(grep '^CLAUDE_CLI=' "$PROJECT_DIR/.env" 2>/dev/null | cut -d= -f2-)
         claude_cli="${claude_cli:-claude}"
-        if command -v "$claude_cli" &>/dev/null; then
+        if [ -x "$claude_cli" ] || command -v "$claude_cli" &>/dev/null; then
             echo "[OK] claude CLI available"
         else
             echo "[FAIL] claude CLI not found at: $claude_cli"
             ok=false
+        fi
+
+        # 6b. terminal-notifier
+        if command -v terminal-notifier &>/dev/null; then
+            echo "[OK] terminal-notifier installed"
+        else
+            echo "[WARN] terminal-notifier missing (no notifications). brew install terminal-notifier"
         fi
 
         # 7. Watch dir
@@ -156,12 +163,13 @@ case "${1:-install}" in
             ok=false
         fi
 
-        # 8. Processed count
-        if [ -f "$PROJECT_DIR/.processed" ]; then
-            processed=$(wc -l < "$PROJECT_DIR/.processed" | tr -d ' ')
-            echo "[INFO] Total processed: $processed videos"
-        else
-            echo "[INFO] No videos processed yet"
+        # 8. Processed / failed counts
+        processed=0
+        [ -f "$PROJECT_DIR/.processed" ] && processed=$(wc -l < "$PROJECT_DIR/.processed" | tr -d ' ')
+        echo "[INFO] Total processed: $processed videos"
+        if [ -f "$PROJECT_DIR/.failed" ] && [ -s "$PROJECT_DIR/.failed" ]; then
+            failed_unique=$(sort -u "$PROJECT_DIR/.failed" | wc -l | tr -d ' ')
+            echo "[WARN] Failed files: $failed_unique (run: $0 retry)"
         fi
 
         # 9. Last log entry
@@ -178,8 +186,40 @@ case "${1:-install}" in
         fi
         ;;
 
+    retry)
+        echo "Resetting failed files for retry..."
+        if [ -f "$PROJECT_DIR/.failed" ]; then
+            failed_count=$(sort -u "$PROJECT_DIR/.failed" | wc -l | tr -d ' ')
+            rm -f "$PROJECT_DIR/.failed"
+            echo "Cleared $failed_count failed entries. Next trigger will retry them."
+            echo "Touch the watch dir to trigger: touch \"$(grep '^WATCH_DIR=' "$PROJECT_DIR/.env" | cut -d= -f2-)\""
+        else
+            echo "No failed files."
+        fi
+        ;;
+
+    reprocess)
+        if [ -z "${2:-}" ]; then
+            echo "Usage: $0 reprocess /path/to/video.mp4"
+            exit 1
+        fi
+        video="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
+        # Remove from processed log
+        if [ -f "$PROJECT_DIR/.processed" ]; then
+            grep -vxF "$video" "$PROJECT_DIR/.processed" > "$PROJECT_DIR/.processed.tmp" || true
+            mv "$PROJECT_DIR/.processed.tmp" "$PROJECT_DIR/.processed"
+        fi
+        # Remove from failed log
+        if [ -f "$PROJECT_DIR/.failed" ]; then
+            grep -vxF "$video" "$PROJECT_DIR/.failed" > "$PROJECT_DIR/.failed.tmp" || true
+            mv "$PROJECT_DIR/.failed.tmp" "$PROJECT_DIR/.failed"
+        fi
+        echo "Removed $video from processed/failed logs."
+        echo "Touch the watch dir to trigger reprocessing."
+        ;;
+
     *)
-        echo "Usage: $0 {install|uninstall|status|logs|health}"
+        echo "Usage: $0 {install|uninstall|status|logs|health|retry|reprocess}"
         exit 1
         ;;
 esac
