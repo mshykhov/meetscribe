@@ -59,7 +59,7 @@ if [ "$real_watch" = "$real_output" ]; then
 fi
 
 # Cleanup old process logs (keep last 20)
-find "$PROJECT_DIR/.logs" -name "process-*.log" -type f | sort | head -n -20 | xargs rm -f 2>/dev/null || true
+find "$PROJECT_DIR/.logs" -name "process-*.log" -type f | sort -r | tail -n +21 | xargs rm -f 2>/dev/null || true
 
 # Cleanup orphaned tmp transcripts
 find "$OUTPUT_DIR" -maxdepth 1 -name ".tmp-*-transcript.txt" -mmin +60 -delete 2>/dev/null || true
@@ -82,14 +82,17 @@ find "$WATCH_DIR" -maxdepth 1 -type f \( "${find_args[@]}" \) | while read -r fi
     if grep -qxF "$file" "$PROCESSED_LOG"; then continue; fi
 
     # Skip files that exceeded max retries
-    fail_count=$(grep -cxF "$file" "$FAILED_LOG" 2>/dev/null || echo 0)
+    fail_count=0
+    if [ -s "$FAILED_LOG" ]; then
+        fail_count=$(grep -cxF "$file" "$FAILED_LOG" || true)
+    fi
     if [ "$fail_count" -ge "$MAX_RETRIES" ]; then
         log "SKIP: $file exceeded $MAX_RETRIES retries"
         continue
     fi
 
     filename="$(basename "$file")"
-    log "New file detected: $file (attempt $((fail_count + 1))/$MAX_RETRIES)"
+    log "New file detected: $file (attempt $(( fail_count + 1 ))/$MAX_RETRIES)"
     notify "Meetscribe" "Новая запись: $filename" "Blow"
 
     # Wait for recording to finish (OBS holds file open)
@@ -114,7 +117,7 @@ find "$WATCH_DIR" -maxdepth 1 -type f \( "${find_args[@]}" \) | while read -r fi
     fi
 
     # Validate video file
-    dur_sec=$(ffprobe -v quiet -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$file" 2>/dev/null | cut -d. -f1)
+    dur_sec=$(ffprobe -v quiet -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$file" 2>/dev/null | head -1 | cut -d. -f1)
     if [ -z "$dur_sec" ] || ! [ "$dur_sec" -ge 5 ] 2>/dev/null; then
         log "SKIP: File too short or corrupted: $file (${dur_sec:-0}s)"
         notify "Meetscribe" "Пропущен битый/короткий файл: $filename" "Basso"
