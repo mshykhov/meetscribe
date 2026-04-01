@@ -6,12 +6,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Load config
-set -a
-source "$PROJECT_DIR/.env"
-set +a
-
 cd "$PROJECT_DIR"
+
+# Load only needed config (don't export secrets)
+WATCH_DIR="$(grep '^WATCH_DIR=' "$PROJECT_DIR/.env" 2>/dev/null | cut -d= -f2- || true)"
 WATCH_DIR="${WATCH_DIR:-$HOME/Videos/OBS}"
 PROCESSED_LOG="$PROJECT_DIR/.processed"
 LOCKFILE="/tmp/com.myron.meeting-pipeline.lock"
@@ -34,6 +32,7 @@ fi
 echo $$ > "$LOCKFILE"
 trap 'rm -f "$LOCKFILE"' EXIT
 
+mkdir -p "$PROJECT_DIR/.logs"
 touch "$PROCESSED_LOG"
 
 # Build find pattern for video extensions
@@ -51,7 +50,7 @@ done
 # Find new video files
 find "$WATCH_DIR" -maxdepth 1 -type f \( "${find_args[@]}" \) | while read -r file; do
     # Skip already processed
-    grep -qxF "$file" "$PROCESSED_LOG" && continue
+    if grep -qxF "$file" "$PROCESSED_LOG"; then continue; fi
 
     filename="$(basename "$file")"
     log "New file detected: $file"

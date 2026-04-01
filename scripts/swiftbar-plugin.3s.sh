@@ -36,7 +36,7 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; t
         fi
     fi
     echo "---"
-    echo "Open logs | bash=tail param1=-f param2=$LOG terminal=true"
+    echo "Open logs | bash='tail' param1='-f' param2='$LOG' terminal=true"
 else
     # Idle - show stats
     processed=0
@@ -66,8 +66,8 @@ else
 
     echo "---"
     echo "Health check | bash=$PROJECT_DIR/scripts/install.sh param1=health terminal=true"
-    echo "Open logs | bash=tail param1=-f param2=$LOG terminal=true"
-    echo "Open output folder | bash=open param1=$HOME/docs/video terminal=false"
+    echo "Open logs | bash='tail' param1='-f' param2='$LOG' terminal=true"
+    echo "Open output folder | bash='open' param1='$HOME/docs/video' terminal=false"
     echo "---"
     echo "Watch: ~/Videos/OBS | size=11 color=#888888"
 fi

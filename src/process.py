@@ -139,9 +139,10 @@ def build_transcript(result: dict) -> str:
 
 
 def call_claude(prompt: str, cfg: dict, timeout: int = 600) -> str:
+    # Use stdin to avoid ARG_MAX limit (~256KB on macOS)
     result = subprocess.run(
-        [cfg["claude_cli"], "-p", prompt, "--model", cfg["claude_model"]],
-        capture_output=True, text=True, timeout=timeout,
+        [cfg["claude_cli"], "-p", "-", "--model", cfg["claude_model"]],
+        input=prompt, capture_output=True, text=True, timeout=timeout,
     )
     if result.returncode != 0:
         raise RuntimeError(f"Claude CLI failed: {result.stderr}")
@@ -205,15 +206,19 @@ def extract_topic(summary: str) -> str:
     return "meeting"
 
 
-_TRANSLIT = str.maketrans(
-    "абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
-    "abvgdeejziiklmnoprstufhcchshshyeyuya".ljust(33, "_")[:33],
-)
+_TRANSLIT = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e",
+    "ё": "yo", "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k",
+    "л": "l", "м": "m", "н": "n", "о": "o", "п": "p", "р": "r",
+    "с": "s", "т": "t", "у": "u", "ф": "f", "х": "kh", "ц": "ts",
+    "ч": "ch", "ш": "sh", "щ": "shch", "ъ": "", "ы": "y", "ь": "",
+    "э": "e", "ю": "yu", "я": "ya",
+}
 
 
 def sanitize_filename(name: str) -> str:
     name = name.lower().strip()
-    name = name.translate(_TRANSLIT)
+    name = "".join(_TRANSLIT.get(c, c) for c in name)
     name = re.sub(r"[^\w\s-]", "", name)
     name = re.sub(r"[\s]+", "-", name)
     name = re.sub(r"-+", "-", name)
@@ -236,14 +241,15 @@ def organize_files(
     transcript_dest = output_dir / f"{base_name}-transcript.txt"
     summary_dest = output_dir / f"{base_name}-summary.md"
 
-    print(f"Moving video to {video_dest}")
-    shutil.move(str(video), str(video_dest))
-
+    # Save text files first (before moving video - safer on disk full errors)
     transcript_dest.write_text(transcript, encoding="utf-8")
     print(f"Saved transcript: {transcript_dest}")
 
     summary_dest.write_text(summary, encoding="utf-8")
     print(f"Saved summary: {summary_dest}")
+
+    print(f"Moving video to {video_dest}")
+    shutil.move(str(video), str(video_dest))
 
     return output_dir
 
