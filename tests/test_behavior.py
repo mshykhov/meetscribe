@@ -439,3 +439,40 @@ class TestSenkoMonkeyPatch:
             assert "/usr/bin/python3" not in source
         except ImportError:
             pytest.skip("senko_backend not available")
+
+
+# --- Tests: MLX integration smoke tests ---
+
+class TestMLXIntegration:
+    @pytest.mark.slow
+    def test_mlx_transcribe_short_audio(self, tmp_path):
+        """MLX transcription produces segments with expected format."""
+        import whisperx_mlx
+
+        speech_file = tmp_path / "speech.aiff"
+        subprocess.run(
+            ["say", "-o", str(speech_file), "Hello world test"],
+            check=True, capture_output=True,
+        )
+        audio_file = tmp_path / "test.m4a"
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(speech_file), "-c:a", "aac", str(audio_file)],
+            check=True, capture_output=True,
+        )
+
+        result = whisperx_mlx.transcribe(
+            str(audio_file), model="tiny", backend="mlx",
+            compute_type="float16", batch_size=4,
+        )
+
+        assert "segments" in result
+        assert "language" in result
+        assert result["language"] == "en"
+
+    @pytest.mark.slow
+    def test_senko_diarization_available(self):
+        """Senko backend must be available on Apple Silicon."""
+        import whisperx_mlx.diarization as d
+        assert d.is_senko_available(), "senko not installed"
+        assert d.is_apple_silicon(), "not Apple Silicon"
+        assert "senko" in d.get_available_backends()
