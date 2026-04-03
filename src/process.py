@@ -197,19 +197,26 @@ def transcribe(video_path: str, cfg: dict) -> dict:
         del align_model
 
         print("[3/4] Diarizing speakers...")
-        try:
-            diarize_pipeline = whisperx_mlx.DiarizationPipeline(
-                use_auth_token=cfg["hf_token"],
-                backend="senko",
-            )
-            diarize_kwargs = {}
-            if cfg["max_speakers"]:
-                diarize_kwargs["max_speakers"] = cfg["max_speakers"]
-            diarize_segments = diarize_pipeline(audio, **diarize_kwargs)
-            result = whisperx_mlx.assign_word_speakers(diarize_segments, result)
-            del diarize_pipeline
-        except Exception as e:
-            print(f"WARNING: Diarization failed, continuing without speakers: {e}")
+        max_diarize_attempts = 3
+        for attempt in range(1, max_diarize_attempts + 1):
+            try:
+                diarize_pipeline = whisperx_mlx.DiarizationPipeline(
+                    use_auth_token=cfg["hf_token"],
+                    backend="senko",
+                )
+                diarize_kwargs = {}
+                if cfg["max_speakers"]:
+                    diarize_kwargs["max_speakers"] = cfg["max_speakers"]
+                diarize_segments = diarize_pipeline(audio, **diarize_kwargs)
+                result = whisperx_mlx.assign_word_speakers(diarize_segments, result)
+                del diarize_pipeline
+                break
+            except Exception as e:
+                if attempt < max_diarize_attempts:
+                    print(f"WARNING: Diarization attempt {attempt}/{max_diarize_attempts} failed: {e}")
+                    print(f"         Retrying...")
+                else:
+                    print(f"WARNING: Diarization failed after {max_diarize_attempts} attempts, continuing without speakers: {e}")
 
         del audio
 
