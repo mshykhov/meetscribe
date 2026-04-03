@@ -11,13 +11,54 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-import whisperx
+import whisperx_mlx
 from dotenv import load_dotenv
-from whisperx.diarize import DiarizationPipeline
 
 # Use cached models, skip update checks
 os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "true")
+# Prevent OMP conflicts between torch and CoreML in senko subprocess
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
+
+def _patch_senko_python_path():
+    """Fix whisperx-mlx senko backend: use venv Python, not system Python."""
+    try:
+        from whisperx_mlx.diarization import senko_backend
+        original = senko_backend.SenkoDiarizationPipeline._run_senko_subprocess
+
+        def patched(self, audio_path, min_speakers, max_speakers):
+            import tempfile
+            script_file = tempfile.NamedTemporaryFile(
+                mode='w', suffix='.py', delete=False
+            )
+            script_file.write(senko_backend.SENKO_SUBPROCESS_SCRIPT)
+            script_file.close()
+            try:
+                env = os.environ.copy()
+                env["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+                env["OMP_NUM_THREADS"] = "1"
+                result = subprocess.run(
+                    [sys.executable, script_file.name, audio_path,
+                     str(min_speakers), str(max_speakers)],
+                    capture_output=True, text=True, timeout=3600, env=env,
+                )
+                if result.returncode != 0:
+                    raise RuntimeError(
+                        f"Senko subprocess failed (exit {result.returncode}): "
+                        f"{result.stderr[-500:]}"
+                    )
+                import json
+                return json.loads(result.stdout)
+            finally:
+                os.unlink(script_file.name)
+
+        senko_backend.SenkoDiarizationPipeline._run_senko_subprocess = patched
+    except (ImportError, AttributeError):
+        pass
+
+
+_patch_senko_python_path()
 
 SUMMARY_PROMPT = """Ты - ассистент для анализа записей встреч.
 
@@ -131,47 +172,41 @@ def transcribe(video_path: str, cfg: dict) -> dict:
     signal.alarm(WHISPERX_TIMEOUT_SEC)
 
     try:
-        print(f"[1/4] Loading model: {cfg['whisper_model']}...")
-        model = whisperx.load_model(
-            cfg["whisper_model"],
-            device="cpu",
-            compute_type="int8",
+        print(f"[1/4] Transcribing ({cfg['whisper_model']}, MLX GPU)...")
+        result = whisperx_mlx.transcribe(
+            video_path,
+            model=cfg["whisper_model"],
+            backend="mlx",
+            compute_type="float16",
+            batch_size=16,
             language=cfg["language"],
+            print_progress=True,
         )
-
-        print(f"[2/4] Transcribing: {video_path}")
-        audio = whisperx.load_audio(video_path)
-        result = model.transcribe(audio, batch_size=4, print_progress=True)
         language = result["language"]
         print(f"       Detected language: {language}")
 
-        # Free model memory before alignment
-        del model
-
-        print("[3/4] Aligning words...")
-        align_model, metadata = whisperx.load_align_model(
+        print("[2/4] Aligning words...")
+        audio = whisperx_mlx.audio.load_audio(video_path)
+        align_model, metadata = whisperx_mlx.load_align_model(
             language_code=language, device="cpu"
         )
-        result = whisperx.align(
+        result = whisperx_mlx.align(
             result["segments"], align_model, metadata, audio, device="cpu",
             print_progress=True,
         )
-
-        # Free alignment model before diarization
         del align_model
 
-        print("[4/4] Diarizing speakers...")
-        diarize_pipeline = DiarizationPipeline(
-            token=cfg["hf_token"], device="cpu"
+        print("[3/4] Diarizing speakers...")
+        diarize_pipeline = whisperx_mlx.DiarizationPipeline(
+            use_auth_token=cfg["hf_token"],
+            backend="senko",
         )
         diarize_kwargs = {}
         if cfg["max_speakers"]:
             diarize_kwargs["max_speakers"] = cfg["max_speakers"]
-        # WhisperX already converts numpy to preloaded waveform dict internally
         diarize_segments = diarize_pipeline(audio, **diarize_kwargs)
-        result = whisperx.assign_word_speakers(diarize_segments, result)
+        result = whisperx_mlx.assign_word_speakers(diarize_segments, result)
 
-        # Free audio and diarization pipeline
         del audio, diarize_pipeline
 
     finally:
@@ -338,7 +373,7 @@ def process_video(video_path: str) -> Path:
     tmp_transcript.parent.mkdir(parents=True, exist_ok=True)
     tmp_transcript.write_text(transcript, encoding="utf-8")
 
-    print("Generating summary with Claude...")
+    print(f"[4/4] Generating summary with Claude...")
     try:
         summary = generate_summary(transcript, cfg)
     except Exception as e:
