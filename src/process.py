@@ -40,7 +40,7 @@ def _patch_senko_python_path():
                 env["OMP_NUM_THREADS"] = "1"
                 result = subprocess.run(
                     [sys.executable, script_file.name, audio_path,
-                     str(min_speakers), str(max_speakers)],
+                     str(min_speakers), str(max_speakers), self._device],
                     capture_output=True, text=True, timeout=3600, env=env,
                 )
                 if result.returncode != 0:
