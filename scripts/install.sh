@@ -63,7 +63,7 @@ case "${1:-install}" in
         SWIFTBAR_DIR="$HOME/Library/Application Support/SwiftBar/Plugins"
         if [ -d "/Applications/SwiftBar.app" ]; then
             mkdir -p "$SWIFTBAR_DIR"
-            ln -sf "$PROJECT_DIR/scripts/swiftbar-plugin.3s.sh" "$SWIFTBAR_DIR/meetscribe.3s.sh"
+            ln -sf "$PROJECT_DIR/scripts/swiftbar-plugin.1s.sh" "$SWIFTBAR_DIR/meetscribe.1s.sh"
             defaults write com.ameba.SwiftBar PluginDirectory "$SWIFTBAR_DIR"
             echo "SwiftBar plugin linked"
         else
@@ -120,10 +120,10 @@ case "${1:-install}" in
         fi
 
         # 4. venv + whisperx
-        if "$PROJECT_DIR/.venv/bin/python" -c "import whisperx" 2>/dev/null; then
-            echo "[OK] Python venv + whisperx"
+        if "$PROJECT_DIR/.venv/bin/python" -c "import whisperx_mlx" 2>/dev/null; then
+            echo "[OK] Python venv + whisperx-mlx"
         else
-            echo "[FAIL] venv or whisperx broken"
+            echo "[FAIL] venv or whisperx-mlx broken"
             ok=false
         fi
 

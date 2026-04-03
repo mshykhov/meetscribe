@@ -135,7 +135,7 @@ find "$WATCH_DIR" -maxdepth 1 -type f \( "${find_args[@]}" \) | while read -r fi
     start_time=$(date +%s)
 
     process_log="$PROJECT_DIR/.logs/process-$(date +%s).log"
-    if "$PROJECT_DIR/.venv/bin/python" -m src.process "$file" >"$process_log" 2>&1; then
+    if PYTHONUNBUFFERED=1 KMP_DUPLICATE_LIB_OK=TRUE "$PROJECT_DIR/.venv/bin/python" -m src.process "$file" >"$process_log" 2>&1; then
         echo "$file" >> "$PROCESSED_LOG"
         elapsed=$(( $(date +%s) - start_time ))
         mins=$(( elapsed / 60 ))
