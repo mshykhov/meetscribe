@@ -197,17 +197,21 @@ def transcribe(video_path: str, cfg: dict) -> dict:
         del align_model
 
         print("[3/4] Diarizing speakers...")
-        diarize_pipeline = whisperx_mlx.DiarizationPipeline(
-            use_auth_token=cfg["hf_token"],
-            backend="senko",
-        )
-        diarize_kwargs = {}
-        if cfg["max_speakers"]:
-            diarize_kwargs["max_speakers"] = cfg["max_speakers"]
-        diarize_segments = diarize_pipeline(audio, **diarize_kwargs)
-        result = whisperx_mlx.assign_word_speakers(diarize_segments, result)
+        try:
+            diarize_pipeline = whisperx_mlx.DiarizationPipeline(
+                use_auth_token=cfg["hf_token"],
+                backend="senko",
+            )
+            diarize_kwargs = {}
+            if cfg["max_speakers"]:
+                diarize_kwargs["max_speakers"] = cfg["max_speakers"]
+            diarize_segments = diarize_pipeline(audio, **diarize_kwargs)
+            result = whisperx_mlx.assign_word_speakers(diarize_segments, result)
+            del diarize_pipeline
+        except Exception as e:
+            print(f"WARNING: Diarization failed, continuing without speakers: {e}")
 
-        del audio, diarize_pipeline
+        del audio
 
     finally:
         signal.alarm(0)
