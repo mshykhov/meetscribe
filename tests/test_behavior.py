@@ -403,3 +403,39 @@ class TestSafetyGuards:
         """Videos exceeding MAX_VIDEO_DURATION_SEC should be rejected."""
         from src.process import MAX_VIDEO_DURATION_SEC
         assert MAX_VIDEO_DURATION_SEC == 4 * 3600  # 4 hours
+
+
+# --- Tests: Process logging ---
+
+class TestProcessLogging:
+    def test_transcribe_prints_step_markers(self):
+        """Step markers [N/4] must follow correct format for SwiftBar parsing."""
+        import re
+        pattern = r'\[\d/4\] \w+'
+        assert re.match(pattern, "[1/4] Transcribing")
+        assert re.match(pattern, "[2/4] Aligning")
+        assert re.match(pattern, "[3/4] Diarizing")
+        assert re.match(pattern, "[4/4] Generating")
+
+
+# --- Tests: Senko monkey-patch ---
+
+class TestSenkoMonkeyPatch:
+    def test_patch_replaces_run_method(self):
+        """Monkey-patch must replace _run_senko_subprocess to use sys.executable."""
+        try:
+            from whisperx_mlx.diarization.senko_backend import SenkoDiarizationPipeline
+            assert SenkoDiarizationPipeline._run_senko_subprocess.__name__ == "patched"
+        except ImportError:
+            pytest.skip("whisperx_mlx.diarization.senko_backend not available")
+
+    def test_patch_uses_sys_executable(self):
+        """Patched method must use sys.executable, not /usr/bin/python3."""
+        import inspect
+        try:
+            from whisperx_mlx.diarization.senko_backend import SenkoDiarizationPipeline
+            source = inspect.getsource(SenkoDiarizationPipeline._run_senko_subprocess)
+            assert "sys.executable" in source
+            assert "/usr/bin/python3" not in source
+        except ImportError:
+            pytest.skip("senko_backend not available")
