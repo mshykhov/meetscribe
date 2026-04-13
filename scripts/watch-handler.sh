@@ -17,8 +17,8 @@ PROCESSED_LOG="$PROJECT_DIR/.processed"
 FAILED_LOG="$PROJECT_DIR/.failed"
 LOCKDIR="/tmp/com.myron.meetscribe.lock.d"
 MAX_RETRIES=3
-STABILITY_CHECKS=3
-STABILITY_INTERVAL=5
+STABILITY_INTERVAL=10
+STABILITY_REQUIRED=3
 MIN_DURATION=5
 EXTENSIONS="mkv mp4 webm flv mov avi"
 
@@ -99,7 +99,7 @@ find "$WATCH_DIR" -maxdepth 1 -type f \( "${find_args[@]}" \) | while read -r fi
     log "New file detected: $file (attempt $(( fail_count + 1 ))/$MAX_RETRIES)"
     notify "Meetscribe" "Новая запись: $filename" "Blow"
 
-    # Wait for recording to finish (OBS holds file open)
+    # Wait for recording to finish: lsof (OBS holds file open) + size stability
     wait_count=0
     while lsof -- "$file" >/dev/null 2>&1; do
         if [ $wait_count -eq 0 ]; then
@@ -120,10 +120,12 @@ find "$WATCH_DIR" -maxdepth 1 -type f \( "${find_args[@]}" \) | while read -r fi
         sleep 2
     fi
 
-    # Wait for file size to stabilize (OBS may not hold lsof lock during entire write)
+    # Extra safety: wait for file size to stabilize (handles cases where lsof misses the lock)
     prev_size=-1
     stable_count=0
-    for i in $(seq 1 $STABILITY_CHECKS); do
+    total_wait=0
+    max_stability_wait=3600
+    while [ "$stable_count" -lt "$STABILITY_REQUIRED" ] && [ "$total_wait" -lt "$max_stability_wait" ]; do
         cur_size=$(stat -f%z "$file" 2>/dev/null || echo 0)
         if [ "$cur_size" = "$prev_size" ] && [ "$cur_size" -gt 0 ]; then
             stable_count=$((stable_count + 1))
@@ -131,15 +133,15 @@ find "$WATCH_DIR" -maxdepth 1 -type f \( "${find_args[@]}" \) | while read -r fi
             stable_count=0
         fi
         prev_size=$cur_size
-        if [ "$stable_count" -ge 2 ]; then
-            break
+        if [ "$stable_count" -lt "$STABILITY_REQUIRED" ]; then
+            sleep "$STABILITY_INTERVAL"
+            total_wait=$((total_wait + STABILITY_INTERVAL))
         fi
-        sleep "$STABILITY_INTERVAL"
     done
 
-    if [ "$stable_count" -lt 2 ]; then
-        log "File size still changing after ${STABILITY_CHECKS} checks, deferring: $file"
-        echo "$file" >> "$FAILED_LOG"
+    if [ "$stable_count" -lt "$STABILITY_REQUIRED" ]; then
+        log "ERROR: File size never stabilized after ${max_stability_wait}s: $file"
+        notify "Meetscribe" "ОШИБКА: файл не стабилизировался $filename" "Basso"
         continue
     fi
 

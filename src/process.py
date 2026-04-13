@@ -244,8 +244,34 @@ Path({str(data_file)!r}).write_text(json.dumps({{
         for attempt in range(1, max_diarize_attempts + 1):
             try:
                 _run_step(f"""
-import json
+import json, os, sys, subprocess, tempfile
 from pathlib import Path
+
+# Patch senko to use venv Python
+try:
+    from whisperx_mlx.diarization import senko_backend
+    def _patched_senko(self, audio_path, min_speakers, max_speakers):
+        sf = tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False)
+        sf.write(senko_backend.SENKO_SUBPROCESS_SCRIPT)
+        sf.close()
+        try:
+            env = os.environ.copy()
+            env["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+            env["OMP_NUM_THREADS"] = "1"
+            r = subprocess.run(
+                [sys.executable, sf.name, audio_path,
+                 str(min_speakers), str(max_speakers), self._device],
+                capture_output=True, text=True, timeout=3600, env=env,
+            )
+            if r.returncode != 0:
+                raise RuntimeError(f"Senko subprocess failed (exit {{r.returncode}}): {{r.stderr[-500:]}}")
+            return json.loads(r.stdout)
+        finally:
+            os.unlink(sf.name)
+    senko_backend.SenkoDiarizationPipeline._run_senko_subprocess = _patched_senko
+except (ImportError, AttributeError):
+    pass
+
 import whisperx_mlx
 
 data = json.loads(Path({str(data_file)!r}).read_text())
