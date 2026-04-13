@@ -17,6 +17,9 @@ PROCESSED_LOG="$PROJECT_DIR/.processed"
 FAILED_LOG="$PROJECT_DIR/.failed"
 LOCKDIR="/tmp/com.myron.meetscribe.lock.d"
 MAX_RETRIES=3
+STABILITY_CHECKS=3
+STABILITY_INTERVAL=5
+MIN_DURATION=5
 EXTENSIONS="mkv mp4 webm flv mov avi"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
@@ -113,16 +116,39 @@ find "$WATCH_DIR" -maxdepth 1 -type f \( "${find_args[@]}" \) | while read -r fi
     done
 
     if [ $wait_count -gt 0 ]; then
-        log "Recording finished, starting processing"
+        log "Recording finished, waiting for flush"
         sleep 2
+    fi
+
+    # Wait for file size to stabilize (OBS may not hold lsof lock during entire write)
+    prev_size=-1
+    stable_count=0
+    for i in $(seq 1 $STABILITY_CHECKS); do
+        cur_size=$(stat -f%z "$file" 2>/dev/null || echo 0)
+        if [ "$cur_size" = "$prev_size" ] && [ "$cur_size" -gt 0 ]; then
+            stable_count=$((stable_count + 1))
+        else
+            stable_count=0
+        fi
+        prev_size=$cur_size
+        if [ "$stable_count" -ge 2 ]; then
+            break
+        fi
+        sleep "$STABILITY_INTERVAL"
+    done
+
+    if [ "$stable_count" -lt 2 ]; then
+        log "File size still changing after ${STABILITY_CHECKS} checks, deferring: $file"
+        echo "$file" >> "$FAILED_LOG"
+        continue
     fi
 
     # Validate video file
     dur_sec=$(ffprobe -v quiet -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$file" 2>/dev/null | head -1 | cut -d. -f1)
-    if [ -z "$dur_sec" ] || ! [ "$dur_sec" -ge 5 ] 2>/dev/null; then
+    if [ -z "$dur_sec" ] || ! [ "$dur_sec" -ge "$MIN_DURATION" ] 2>/dev/null; then
         log "SKIP: File too short or corrupted: $file (${dur_sec:-0}s)"
         notify "Meetscribe" "Пропущен битый/короткий файл: $filename" "Basso"
-        echo "$file" >> "$PROCESSED_LOG"
+        echo "$file" >> "$FAILED_LOG"
         continue
     fi
 

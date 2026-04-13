@@ -2,6 +2,7 @@
 """Process a meeting video: transcribe, diarize, summarize, organize."""
 
 import argparse
+import gc
 import os
 import re
 import shutil
@@ -154,6 +155,19 @@ def get_audio_duration(video_path: str) -> float:
         return 0.0
 
 
+def _run_step(step_script: str, tmp_dir: Path, timeout: int = WHISPERX_TIMEOUT_SEC) -> None:
+    """Run a pipeline step in an isolated subprocess to guarantee memory release."""
+    env = os.environ.copy()
+    env["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+    env["PYTHONUNBUFFERED"] = "1"
+    result = subprocess.run(
+        [sys.executable, "-c", step_script],
+        timeout=timeout, env=env,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"Pipeline step failed with exit code {result.returncode}")
+
+
 def transcribe(video_path: str, cfg: dict) -> dict:
     duration = get_audio_duration(video_path)
     duration_min = int(duration // 60)
@@ -167,49 +181,88 @@ def transcribe(video_path: str, cfg: dict) -> dict:
     est_min = max(1, int(duration / 60 * 0.2))
     print(f"Video duration: {duration_min}m, estimated processing: ~{est_min}m")
 
-    # Set timeout for entire transcription
-    old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
-    signal.alarm(WHISPERX_TIMEOUT_SEC)
+    import tempfile
+    tmp_dir = Path(tempfile.mkdtemp(prefix="meetscribe-"))
+    data_file = tmp_dir / "pipeline_data.json"
 
     try:
+        # Step 1: Transcribe in isolated subprocess
         print(f"[1/4] Transcribing ({cfg['whisper_model']}, MLX GPU)...")
-        result = whisperx_mlx.transcribe(
-            video_path,
-            model=cfg["whisper_model"],
-            backend="mlx",
-            compute_type="float16",
-            batch_size=16,
-            language=cfg["language"],
-            print_progress=True,
-        )
-        language = result["language"]
+        _run_step(f"""
+import json
+from pathlib import Path
+import whisperx_mlx
+
+result = whisperx_mlx.transcribe(
+    {video_path!r},
+    model={cfg['whisper_model']!r},
+    backend="mlx",
+    compute_type="float16",
+    batch_size=16,
+    language={cfg['language']!r},
+    print_progress=True,
+)
+Path({str(data_file)!r}).write_text(json.dumps({{
+    "segments": result["segments"],
+    "language": result["language"],
+}}))
+""", tmp_dir)
+
+        import json
+        data = json.loads(data_file.read_text())
+        language = data["language"]
         print(f"       Detected language: {language}")
 
+        # Step 2: Align in isolated subprocess
         print("[2/4] Aligning words...")
-        audio = whisperx_mlx.audio.load_audio(video_path)
-        align_model, metadata = whisperx_mlx.load_align_model(
-            language_code=language, device="cpu"
-        )
-        result = whisperx_mlx.align(
-            result["segments"], align_model, metadata, audio, device="cpu",
-            print_progress=True,
-        )
-        del align_model
+        _run_step(f"""
+import json
+from pathlib import Path
+import whisperx_mlx
 
+data = json.loads(Path({str(data_file)!r}).read_text())
+audio = whisperx_mlx.audio.load_audio({video_path!r})
+align_model, metadata = whisperx_mlx.load_align_model(
+    language_code=data["language"], device="cpu"
+)
+result = whisperx_mlx.align(
+    data["segments"], align_model, metadata, audio, device="cpu",
+    print_progress=True,
+)
+Path({str(data_file)!r}).write_text(json.dumps({{
+    "segments": result["segments"],
+    "language": data["language"],
+}}))
+""", tmp_dir)
+
+        data = json.loads(data_file.read_text())
+
+        # Step 3: Diarize in isolated subprocess
         print("[3/4] Diarizing speakers...")
         max_diarize_attempts = 3
+        diarize_ok = False
         for attempt in range(1, max_diarize_attempts + 1):
             try:
-                diarize_pipeline = whisperx_mlx.DiarizationPipeline(
-                    use_auth_token=cfg["hf_token"],
-                    backend="senko",
-                )
-                diarize_kwargs = {}
-                if cfg["max_speakers"]:
-                    diarize_kwargs["max_speakers"] = cfg["max_speakers"]
-                diarize_segments = diarize_pipeline(audio, **diarize_kwargs)
-                result = whisperx_mlx.assign_word_speakers(diarize_segments, result)
-                del diarize_pipeline
+                _run_step(f"""
+import json
+from pathlib import Path
+import whisperx_mlx
+
+data = json.loads(Path({str(data_file)!r}).read_text())
+audio = whisperx_mlx.audio.load_audio({video_path!r})
+diarize_pipeline = whisperx_mlx.DiarizationPipeline(
+    use_auth_token={cfg['hf_token']!r},
+    backend="senko",
+)
+diarize_segments = diarize_pipeline(audio{', max_speakers=' + str(cfg['max_speakers']) if cfg['max_speakers'] else ''})
+result = whisperx_mlx.assign_word_speakers(diarize_segments, {{"segments": data["segments"]}})
+Path({str(data_file)!r}).write_text(json.dumps({{
+    "segments": result["segments"],
+    "language": data["language"],
+}}))
+""", tmp_dir)
+                diarize_ok = True
+                data = json.loads(data_file.read_text())
                 break
             except Exception as e:
                 if attempt < max_diarize_attempts:
@@ -218,13 +271,10 @@ def transcribe(video_path: str, cfg: dict) -> dict:
                 else:
                     print(f"WARNING: Diarization failed after {max_diarize_attempts} attempts, continuing without speakers: {e}")
 
-        del audio
+        return {"segments": data["segments"], "language": data["language"]}
 
     finally:
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, old_handler)
-
-    return result
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def format_timestamp(seconds: float) -> str:

@@ -1,6 +1,6 @@
 [project]
 name = "meetscribe"
-version = "0.1.0"
+version = "0.2.0"
 description = "Automated meeting video transcription, diarization, and summarization pipeline"
 requires-python = ">=3.10,<3.14"
 dependencies = [

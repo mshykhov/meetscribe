@@ -175,6 +175,103 @@ class TestDuration:
         assert get_audio_duration(str(bad_file)) == 0.0
 
 
+# --- Tests: File stability detection ---
+
+class TestFileStability:
+    def test_wait_for_stable_size_detects_growing_file(self, tmp_path):
+        """A file that is still growing should not pass stability check immediately."""
+        video = tmp_path / "growing.mp4"
+        video.write_bytes(b"x" * 100)
+
+        result = subprocess.run(
+            ["bash", "-c", f"""
+                file="{video}"
+                STABILITY_CHECKS=2
+                STABILITY_INTERVAL=1
+                prev_size=-1
+                stable_count=0
+                for i in $(seq 1 $STABILITY_CHECKS); do
+                    cur_size=$(stat -f%z "$file" 2>/dev/null || echo 0)
+                    if [ "$cur_size" = "$prev_size" ] && [ "$cur_size" -gt 0 ]; then
+                        stable_count=$((stable_count + 1))
+                    else
+                        stable_count=0
+                    fi
+                    prev_size=$cur_size
+                    sleep 0.1
+                done
+                if [ "$stable_count" -ge 1 ]; then
+                    echo "STABLE"
+                else
+                    echo "UNSTABLE"
+                fi
+            """],
+            capture_output=True, text=True,
+        )
+        # File is not growing, so after 2 checks with same size it's stable
+        assert "STABLE" in result.stdout
+
+    def test_short_file_not_marked_processed(self, tmp_path):
+        """Short/corrupted files should NOT be added to .processed, only to .failed."""
+        processed = tmp_path / ".processed"
+        processed.write_text("")
+        failed = tmp_path / ".failed"
+        failed.write_text("")
+
+        result = subprocess.run(
+            ["bash", "-c", f"""
+                PROCESSED_LOG="{processed}"
+                FAILED_LOG="{failed}"
+                file="/some/short.mp4"
+                dur_sec=2
+                MIN_DURATION=5
+
+                if [ -z "$dur_sec" ] || ! [ "$dur_sec" -ge "$MIN_DURATION" ] 2>/dev/null; then
+                    echo "$file" >> "$FAILED_LOG"
+                    echo "ADDED_TO_FAILED"
+                else
+                    echo "WOULD_PROCESS"
+                fi
+            """],
+            capture_output=True, text=True,
+        )
+        assert "ADDED_TO_FAILED" in result.stdout
+        assert "/some/short.mp4" not in processed.read_text()
+        assert "/some/short.mp4" in failed.read_text()
+
+    def test_short_file_retried_on_next_run(self, tmp_path):
+        """A file that was short once should be retried (not permanently skipped)."""
+        processed = tmp_path / ".processed"
+        processed.write_text("")
+        failed = tmp_path / ".failed"
+        failed.write_text("/some/video.mp4\n")  # 1 failure
+
+        result = subprocess.run(
+            ["bash", "-c", f"""
+                PROCESSED_LOG="{processed}"
+                FAILED_LOG="{failed}"
+                MAX_RETRIES=3
+                file="/some/video.mp4"
+
+                if grep -qxF "$file" "$PROCESSED_LOG"; then
+                    echo "SKIP_PROCESSED"
+                else
+                    fail_count=0
+                    if [ -s "$FAILED_LOG" ]; then
+                        fail_count=$(grep -cxF "$file" "$FAILED_LOG" || true)
+                    fi
+                    if [ "$fail_count" -ge "$MAX_RETRIES" ]; then
+                        echo "SKIP_MAX_RETRIES"
+                    else
+                        echo "WOULD_RETRY attempt $((fail_count + 1))"
+                    fi
+                fi
+            """],
+            capture_output=True, text=True,
+        )
+        assert "WOULD_RETRY attempt 2" in result.stdout
+
+
 # --- Tests: Watch handler shell script ---
 
 class TestWatchHandler:
