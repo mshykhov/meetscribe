@@ -122,8 +122,8 @@ def load_config() -> dict:
 
 
 def get_recording_date(video_path: str) -> str:
-    """Get recording date from video metadata, file mtime, or current time."""
-    # Try creation_time from video metadata
+    """Get recording datetime from video metadata, file mtime, or current time."""
+    # Try creation_time from video metadata (stored in UTC)
     result = subprocess.run(
         ["ffprobe", "-v", "quiet", "-show_entries", "format_tags=creation_time",
          "-of", "default=noprint_wrappers=1:nokey=1", video_path],
@@ -131,16 +131,20 @@ def get_recording_date(video_path: str) -> str:
     )
     ts = result.stdout.strip().split("\n")[0] if result.stdout.strip() else ""
     if ts and "T" in ts:
-        return ts[:10]  # "2026-04-01T07:02:53..." -> "2026-04-01"
+        try:
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            return dt.astimezone().strftime("%Y-%m-%d-%H.%M")
+        except ValueError:
+            return ts[:10]
 
-    # Fallback: file modification time
+    # Fallback: file modification time (already local)
     try:
         mtime = Path(video_path).stat().st_mtime
-        return datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+        return datetime.fromtimestamp(mtime).strftime("%Y-%m-%d-%H.%M")
     except OSError:
         pass
 
-    return datetime.now().strftime("%Y-%m-%d")
+    return datetime.now().strftime("%Y-%m-%d-%H.%M")
 
 
 def get_audio_duration(video_path: str) -> float:
