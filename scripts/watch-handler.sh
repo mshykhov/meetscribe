@@ -29,7 +29,7 @@ notify() {
     local message="$2"
     local sound="${3:-default}"
     terminal-notifier -title "$title" -message "$message" -sound "$sound" -group "meetscribe" \
-        -contentImage "$PROJECT_DIR/assets/icon.png" -appIcon "$PROJECT_DIR/assets/icon.png" 2>/dev/null || true
+        -contentImage "$PROJECT_DIR/assets/icon.png" -appIcon "$PROJECT_DIR/assets/icon.png" >/dev/null 2>&1 || true
 }
 
 # Atomic lock via mkdir (POSIX atomic operation)
@@ -97,7 +97,6 @@ find "$WATCH_DIR" -maxdepth 1 -type f \( "${find_args[@]}" \) | while read -r fi
 
     filename="$(basename "$file")"
     log "New file detected: $file (attempt $(( fail_count + 1 ))/$MAX_RETRIES)"
-    notify "Meetscribe" "Новая запись: $filename" "Blow"
 
     # Wait for recording to finish: lsof (OBS holds file open) + size stability
     wait_count=0

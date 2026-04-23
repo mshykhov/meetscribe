@@ -93,19 +93,15 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; t
         fi
     fi
 
-    # Elapsed time
+    # Elapsed time — derived from process-<epoch>.log filename (when Python subprocess actually started)
     elapsed_text=""
-    start_pid=$(cat "$LOCKFILE" 2>/dev/null)
-    if [ -n "$start_pid" ]; then
-        ps_start=$(ps -p "$start_pid" -o lstart= 2>/dev/null)
-        if [ -n "$ps_start" ]; then
-            start_epoch=$(date -j -f "%a %b %d %T %Y" "$ps_start" +%s 2>/dev/null)
+    if [ -n "$process_log" ]; then
+        start_epoch=$(basename "$process_log" | sed -n 's/^process-\([0-9]\{10,\}\)\.log$/\1/p')
+        if [ -n "$start_epoch" ]; then
             now_epoch=$(date +%s)
-            if [ -n "$start_epoch" ]; then
-                elapsed=$(( now_epoch - start_epoch ))
-                elapsed_min=$(( elapsed / 60 ))
-                elapsed_sec=$(( elapsed % 60 ))
-                elapsed_text="${elapsed_min}m ${elapsed_sec}s"
+            elapsed=$(( now_epoch - start_epoch ))
+            if [ "$elapsed" -ge 0 ]; then
+                elapsed_text="$(( elapsed / 60 ))m $(( elapsed % 60 ))s"
             fi
         fi
     fi
@@ -124,7 +120,15 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; t
     model="${model:-unknown}"
 
     # Menu bar - show step progress
-    echo "MS ${step_num}/4 | sfimage=waveform.circle.fill color=#4CAF50"
+    # Stage-aware SF Symbol (no text, just the icon — color stays green for "active")
+    case "$step_num" in
+        1) menu_icon="waveform" ;;
+        2) menu_icon="text.alignleft" ;;
+        3) menu_icon="person.2.wave.2" ;;
+        4) menu_icon="sparkles" ;;
+        *) menu_icon="waveform" ;;
+    esac
+    echo "| sfimage=${menu_icon} color=#4CAF50"
 
     # Dropdown
     echo "---"
@@ -152,6 +156,18 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; t
     if [ -n "$elapsed_text" ]; then
         echo "Elapsed: $elapsed_text | size=11 color=#888888"
     fi
+
+    # Load-average advisory — show only when system is genuinely overloaded
+    load1=$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')
+    ncpu=$(sysctl -n hw.ncpu 2>/dev/null || echo 8)
+    if [ -n "$load1" ]; then
+        load_int=${load1%%.*}
+        threshold=$(( ncpu * 15 / 10 ))
+        if [ "$load_int" -gt "$threshold" ]; then
+            echo "⚠ High system load (${load1}) — close heavy apps to speed up | color=#FF9800 size=11"
+        fi
+    fi
+
     echo "---"
     processed=0
     [ -f "$PROJECT_DIR/.processed" ] && processed=$(wc -l < "$PROJECT_DIR/.processed" | tr -d ' ')
