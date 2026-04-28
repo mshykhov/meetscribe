@@ -118,6 +118,9 @@ def load_config() -> dict:
         "max_speakers": int(os.environ.get("MAX_SPEAKERS", "0")) or None,
         "claude_model": os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6"),
         "claude_cli": os.environ.get("CLAUDE_CLI", "claude"),
+        "transcribe_backend": os.environ.get("TRANSCRIBE_BACKEND", "local"),
+        "openai_api_key": os.environ.get("OPENAI_API_KEY", ""),
+        "openai_transcribe_model": os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1"),
     }
 
 
