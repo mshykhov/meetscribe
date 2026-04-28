@@ -128,7 +128,12 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; t
         4) menu_icon="sparkles" ;;
         *) menu_icon="waveform" ;;
     esac
-    echo "| sfimage=${menu_icon} color=#4CAF50"
+    # Compact menu bar: stage number + optional pct (when available) + SF Symbol icon
+    menu_text="${step_num}/4"
+    if [ -n "$pct" ]; then
+        menu_text="${menu_text} ${pct}"
+    fi
+    echo "${menu_text} | sfimage=${menu_icon} color=#4CAF50"
 
     # Dropdown
     echo "---"
@@ -183,5 +188,16 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; t
     echo "Open pipeline log | bash='open' param1='-a' param2='Console' param3='$LOGDIR/pipeline.log' terminal=false"
     echo "Health check | bash='$PROJECT_DIR/scripts/install.sh' param1='health' terminal=true"
 else
-    exit 0
+    # Idle: subtle gray icon + minimal dropdown (so user knows the plugin is alive)
+    echo "| sfimage=text.alignleft color=#888888"
+    echo "---"
+    echo "Meetscribe (idle) | size=14 color=#888888"
+    echo "---"
+    processed=0
+    [ -f "$PROJECT_DIR/.processed" ] && processed=$(wc -l < "$PROJECT_DIR/.processed" | tr -d ' ')
+    echo "Total processed: $processed videos | size=11 color=#888888"
+    echo "---"
+    echo "Open output folder | bash='open' param1='$HOME/docs/video' terminal=false"
+    echo "Open pipeline log | bash='open' param1='-a' param2='Console' param3='$LOGDIR/pipeline.log' terminal=false"
+    echo "Health check | bash='$PROJECT_DIR/scripts/install.sh' param1='health' terminal=true"
 fi
