@@ -195,7 +195,7 @@ def transcribe(video_path: str, cfg: dict) -> dict:
     try:
         backend = cfg.get("transcribe_backend", "local")
         if backend == "openai":
-            print(f"[1/3] Transcribing via OpenAI ({cfg['openai_transcribe_model']})...")
+            print(f"[1/4] Transcribing via OpenAI ({cfg['openai_transcribe_model']})...")
             from src.openai_transcribe import transcribe_via_openai
             import json
             data = transcribe_via_openai(
