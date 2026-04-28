@@ -263,3 +263,25 @@ class TestTranscribeViaOpenAI:
         video = _make_test_video(tmp_path / "v.mp4", duration_sec=2)
         with pytest.raises(ValueError, match="OPENAI_API_KEY"):
             openai_transcribe.transcribe_via_openai(video, api_key="", model="whisper-1", language=None)
+
+    def test_retries_on_openai_api_connection_error(self, tmp_path, monkeypatch):
+        from src import openai_transcribe
+        from openai import APIConnectionError
+
+        video = _make_test_video(tmp_path / "v.mp4", duration_sec=2)
+        mock_response = MagicMock()
+        mock_response.model_dump.return_value = {"language": "en", "segments": [], "words": []}
+        mock_client = MagicMock()
+
+        # APIConnectionError requires a `request` kwarg; pass a stub.
+        # Use a simple Mock for the request object.
+        request_stub = MagicMock()
+        api_err = APIConnectionError(request=request_stub)
+
+        mock_client.audio.transcriptions.create.side_effect = [api_err, api_err, mock_response]
+        monkeypatch.setattr(openai_transcribe, "OpenAI", lambda api_key: mock_client)
+        monkeypatch.setattr(openai_transcribe.time, "sleep", lambda _: None)
+
+        out = openai_transcribe.transcribe_via_openai(video, api_key="sk-x", model="whisper-1", language=None)
+        assert out["language"] == "en"
+        assert mock_client.audio.transcriptions.create.call_count == 3

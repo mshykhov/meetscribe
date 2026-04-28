@@ -9,7 +9,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from openai import OpenAI
+from openai import OpenAI, APIConnectionError, APITimeoutError
 
 
 def extract_audio_to_opus(video_path: Path, output_path: Path) -> Path:
@@ -120,7 +120,7 @@ def transcribe_via_openai(
                 with audio_path.open("rb") as f:
                     response = client.audio.transcriptions.create(file=f, **kwargs)
                 return map_openai_to_whisperx(response.model_dump())
-            except (ConnectionError, TimeoutError) as e:
+            except (ConnectionError, TimeoutError, APIConnectionError, APITimeoutError) as e:
                 last_err = e
                 if attempt < MAX_RETRIES:
                     time.sleep(RETRY_BACKOFF_SEC * attempt)
