@@ -5,7 +5,11 @@ that returns word-level timestamps directly.
 """
 
 import subprocess
+import tempfile
+import time
 from pathlib import Path
+
+from openai import OpenAI
 
 
 def extract_audio_to_opus(video_path: Path, output_path: Path) -> Path:
@@ -80,3 +84,46 @@ def map_openai_to_whisperx(response: dict) -> dict:
         })
 
     return {"segments": segments, "language": language}
+
+
+MAX_RETRIES = 3
+RETRY_BACKOFF_SEC = 2
+
+
+def transcribe_via_openai(
+    video_path: Path,
+    api_key: str,
+    model: str,
+    language: str | None,
+) -> dict:
+    """Transcribe video via OpenAI Whisper API. Returns whisperx-shaped dict."""
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY is required when TRANSCRIBE_BACKEND=openai")
+
+    with tempfile.TemporaryDirectory(prefix="meetscribe-openai-") as tmp:
+        audio_path = extract_audio_to_opus(video_path, Path(tmp) / "audio.opus")
+        validate_audio_size(audio_path)
+
+        client = OpenAI(api_key=api_key)
+
+        kwargs = {
+            "model": model,
+            "response_format": "verbose_json",
+            "timestamp_granularities": ["word", "segment"],
+        }
+        if language:
+            kwargs["language"] = language
+
+        last_err: Exception | None = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                with audio_path.open("rb") as f:
+                    response = client.audio.transcriptions.create(file=f, **kwargs)
+                return map_openai_to_whisperx(response.model_dump())
+            except (ConnectionError, TimeoutError) as e:
+                last_err = e
+                if attempt < MAX_RETRIES:
+                    time.sleep(RETRY_BACKOFF_SEC * attempt)
+
+        assert last_err is not None
+        raise last_err

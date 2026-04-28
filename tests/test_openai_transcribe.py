@@ -158,3 +158,108 @@ class TestResponseMapping:
         resp = {"language": "en", "segments": [], "words": []}
         out = map_openai_to_whisperx(resp)
         assert out == {"segments": [], "language": "en"}
+
+
+from unittest.mock import MagicMock
+
+
+class TestTranscribeViaOpenAI:
+    def test_full_flow_calls_api_with_correct_params(self, tmp_path, monkeypatch):
+        from src import openai_transcribe
+
+        video = _make_test_video(tmp_path / "v.mp4", duration_sec=2)
+
+        # Mock the OpenAI client
+        mock_response = MagicMock()
+        mock_response.model_dump.return_value = {
+            "language": "en",
+            "duration": 2.0,
+            "text": "Test.",
+            "words": [{"word": "Test", "start": 0.1, "end": 0.5}],
+            "segments": [{"start": 0.0, "end": 1.0, "text": "Test."}],
+        }
+        mock_client = MagicMock()
+        mock_client.audio.transcriptions.create.return_value = mock_response
+        monkeypatch.setattr(openai_transcribe, "OpenAI", lambda api_key: mock_client)
+
+        out = openai_transcribe.transcribe_via_openai(
+            video, api_key="sk-x", model="whisper-1", language=None,
+        )
+
+        # Assert call params
+        call = mock_client.audio.transcriptions.create.call_args
+        assert call.kwargs["model"] == "whisper-1"
+        assert call.kwargs["response_format"] == "verbose_json"
+        assert call.kwargs["timestamp_granularities"] == ["word", "segment"]
+
+        # Assert output shape
+        assert out["language"] == "en"
+        assert len(out["segments"]) == 1
+        assert out["segments"][0]["words"][0]["word"] == "Test"
+
+    def test_passes_language_when_provided(self, tmp_path, monkeypatch):
+        from src import openai_transcribe
+
+        video = _make_test_video(tmp_path / "v.mp4", duration_sec=2)
+        mock_response = MagicMock()
+        mock_response.model_dump.return_value = {"language": "ru", "segments": [], "words": []}
+        mock_client = MagicMock()
+        mock_client.audio.transcriptions.create.return_value = mock_response
+        monkeypatch.setattr(openai_transcribe, "OpenAI", lambda api_key: mock_client)
+
+        openai_transcribe.transcribe_via_openai(video, api_key="sk-x", model="whisper-1", language="ru")
+
+        call = mock_client.audio.transcriptions.create.call_args
+        assert call.kwargs["language"] == "ru"
+
+    def test_omits_language_when_none(self, tmp_path, monkeypatch):
+        from src import openai_transcribe
+
+        video = _make_test_video(tmp_path / "v.mp4", duration_sec=2)
+        mock_response = MagicMock()
+        mock_response.model_dump.return_value = {"language": "en", "segments": [], "words": []}
+        mock_client = MagicMock()
+        mock_client.audio.transcriptions.create.return_value = mock_response
+        monkeypatch.setattr(openai_transcribe, "OpenAI", lambda api_key: mock_client)
+
+        openai_transcribe.transcribe_via_openai(video, api_key="sk-x", model="whisper-1", language=None)
+
+        call = mock_client.audio.transcriptions.create.call_args
+        assert "language" not in call.kwargs
+
+    def test_retries_on_transient_failure(self, tmp_path, monkeypatch):
+        from src import openai_transcribe
+
+        video = _make_test_video(tmp_path / "v.mp4", duration_sec=2)
+        mock_response = MagicMock()
+        mock_response.model_dump.return_value = {"language": "en", "segments": [], "words": []}
+        mock_client = MagicMock()
+        mock_client.audio.transcriptions.create.side_effect = [
+            ConnectionError("network"),
+            ConnectionError("network"),
+            mock_response,
+        ]
+        monkeypatch.setattr(openai_transcribe, "OpenAI", lambda api_key: mock_client)
+        monkeypatch.setattr(openai_transcribe.time, "sleep", lambda _: None)
+
+        out = openai_transcribe.transcribe_via_openai(video, api_key="sk-x", model="whisper-1", language=None)
+        assert out["language"] == "en"
+        assert mock_client.audio.transcriptions.create.call_count == 3
+
+    def test_raises_after_max_retries(self, tmp_path, monkeypatch):
+        from src import openai_transcribe
+
+        video = _make_test_video(tmp_path / "v.mp4", duration_sec=2)
+        mock_client = MagicMock()
+        mock_client.audio.transcriptions.create.side_effect = ConnectionError("network")
+        monkeypatch.setattr(openai_transcribe, "OpenAI", lambda api_key: mock_client)
+        monkeypatch.setattr(openai_transcribe.time, "sleep", lambda _: None)
+
+        with pytest.raises(ConnectionError):
+            openai_transcribe.transcribe_via_openai(video, api_key="sk-x", model="whisper-1", language=None)
+
+    def test_raises_on_missing_api_key(self, tmp_path):
+        from src import openai_transcribe
+        video = _make_test_video(tmp_path / "v.mp4", duration_sec=2)
+        with pytest.raises(ValueError, match="OPENAI_API_KEY"):
+            openai_transcribe.transcribe_via_openai(video, api_key="", model="whisper-1", language=None)
