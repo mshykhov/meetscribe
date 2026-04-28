@@ -34,3 +34,46 @@ class TestConfigLoading:
             cfg = load_config()
         assert cfg["openai_api_key"] == "sk-x"
         assert cfg["openai_transcribe_model"] == "whisper-1"
+
+
+import subprocess
+import tempfile
+from pathlib import Path
+
+
+def _make_test_video(path: Path, duration_sec: int = 3) -> Path:
+    """Create a minimal silent test video with audio track."""
+    subprocess.run(
+        ["ffmpeg", "-f", "lavfi", "-i", f"color=c=black:s=160x120:d={duration_sec}",
+         "-f", "lavfi", "-i", f"anullsrc=channel_layout=mono:sample_rate=16000:d={duration_sec}",
+         "-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-shortest", "-y", str(path)],
+        check=True, capture_output=True,
+    )
+    return path
+
+
+class TestAudioExtraction:
+    def test_extract_audio_creates_opus_file(self, tmp_path):
+        from src.openai_transcribe import extract_audio_to_opus
+        video = _make_test_video(tmp_path / "in.mp4", duration_sec=3)
+        out = extract_audio_to_opus(video, tmp_path / "out.opus")
+        assert out.exists()
+        assert out.suffix == ".opus"
+
+    def test_extract_audio_uses_mono_32kbps(self, tmp_path):
+        from src.openai_transcribe import extract_audio_to_opus
+        video = _make_test_video(tmp_path / "in.mp4", duration_sec=3)
+        out = extract_audio_to_opus(video, tmp_path / "out.opus")
+        # Probe the output
+        result = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-show_streams", "-select_streams", "a:0",
+             "-of", "default=noprint_wrappers=1", str(out)],
+            capture_output=True, text=True, check=True,
+        )
+        assert "channels=1" in result.stdout
+        assert "codec_name=opus" in result.stdout
+
+    def test_extract_audio_raises_on_missing_input(self, tmp_path):
+        from src.openai_transcribe import extract_audio_to_opus
+        with pytest.raises(RuntimeError, match="ffmpeg failed"):
+            extract_audio_to_opus(tmp_path / "missing.mp4", tmp_path / "out.opus")
