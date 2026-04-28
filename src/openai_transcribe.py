@@ -39,3 +39,44 @@ def validate_audio_size(audio_path: Path) -> None:
             f"At 32 kbps opus this means video is over ~2 hours. "
             f"Either split the video or switch TRANSCRIBE_BACKEND=local."
         )
+
+
+def map_openai_to_whisperx(response: dict) -> dict:
+    """Convert OpenAI verbose_json response to whisperx schema.
+
+    OpenAI returns top-level `words` and `segments` lists. Whisperx schema
+    nests `words` inside each segment.
+    """
+    api_segments = response.get("segments", [])
+    api_words = response.get("words", [])
+    language = response.get("language", "")
+
+    segments = []
+    word_idx = 0
+    for seg in api_segments:
+        seg_start = float(seg["start"])
+        seg_end = float(seg["end"])
+        seg_words = []
+        # Walk forward through words while they belong to this segment.
+        # Words sorted by start; assign by start time within segment bounds.
+        while word_idx < len(api_words):
+            w = api_words[word_idx]
+            w_start = float(w["start"])
+            if w_start >= seg_end:
+                break
+            if w_start >= seg_start:
+                seg_words.append({
+                    "word": w["word"],
+                    "start": w_start,
+                    "end": float(w["end"]),
+                    "score": 1.0,
+                })
+            word_idx += 1
+        segments.append({
+            "start": seg_start,
+            "end": seg_end,
+            "text": seg["text"],
+            "words": seg_words,
+        })
+
+    return {"segments": segments, "language": language}

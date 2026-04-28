@@ -96,3 +96,65 @@ class TestSizeValidation:
         f.write_bytes(b"\x00" * (30 * 1024 * 1024))
         with pytest.raises(ValueError, match="2 hour"):
             validate_audio_size(f)
+
+
+class TestResponseMapping:
+    def _sample_response(self):
+        return {
+            "task": "transcribe",
+            "language": "en",
+            "duration": 5.0,
+            "text": "Hello world. How are you?",
+            "words": [
+                {"word": "Hello", "start": 0.10, "end": 0.50},
+                {"word": "world", "start": 0.60, "end": 1.00},
+                {"word": "How",   "start": 2.50, "end": 2.70},
+                {"word": "are",   "start": 2.80, "end": 2.95},
+                {"word": "you",   "start": 3.00, "end": 3.30},
+            ],
+            "segments": [
+                {"id": 0, "start": 0.0, "end": 1.5, "text": "Hello world."},
+                {"id": 1, "start": 2.4, "end": 4.0, "text": "How are you?"},
+            ],
+        }
+
+    def test_maps_top_level_language(self):
+        from src.openai_transcribe import map_openai_to_whisperx
+        out = map_openai_to_whisperx(self._sample_response())
+        assert out["language"] == "en"
+
+    def test_returns_segments_list(self):
+        from src.openai_transcribe import map_openai_to_whisperx
+        out = map_openai_to_whisperx(self._sample_response())
+        assert len(out["segments"]) == 2
+        assert out["segments"][0]["text"] == "Hello world."
+        assert out["segments"][0]["start"] == 0.0
+        assert out["segments"][0]["end"] == 1.5
+
+    def test_distributes_words_to_segments_by_time(self):
+        from src.openai_transcribe import map_openai_to_whisperx
+        out = map_openai_to_whisperx(self._sample_response())
+        seg0_words = [w["word"] for w in out["segments"][0]["words"]]
+        seg1_words = [w["word"] for w in out["segments"][1]["words"]]
+        assert seg0_words == ["Hello", "world"]
+        assert seg1_words == ["How", "are", "you"]
+
+    def test_word_entries_have_score_field(self):
+        from src.openai_transcribe import map_openai_to_whisperx
+        out = map_openai_to_whisperx(self._sample_response())
+        word = out["segments"][0]["words"][0]
+        assert "score" in word
+        assert "start" in word
+        assert "end" in word
+
+    def test_handles_response_without_words(self):
+        from src.openai_transcribe import map_openai_to_whisperx
+        resp = {"language": "en", "segments": [{"start": 0, "end": 1, "text": "Hi"}]}
+        out = map_openai_to_whisperx(resp)
+        assert out["segments"][0]["words"] == []
+
+    def test_handles_empty_segments(self):
+        from src.openai_transcribe import map_openai_to_whisperx
+        resp = {"language": "en", "segments": [], "words": []}
+        out = map_openai_to_whisperx(resp)
+        assert out == {"segments": [], "language": "en"}
