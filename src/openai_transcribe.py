@@ -101,7 +101,8 @@ def transcribe_via_openai(
         raise ValueError("OPENAI_API_KEY is required when TRANSCRIBE_BACKEND=openai")
 
     with tempfile.TemporaryDirectory(prefix="meetscribe-openai-") as tmp:
-        audio_path = extract_audio_to_opus(video_path, Path(tmp) / "audio.opus")
+        # OpenAI rejects .opus extension; use .ogg (Opus-in-Ogg container) which is in their accepted list.
+        audio_path = extract_audio_to_opus(video_path, Path(tmp) / "audio.ogg")
         validate_audio_size(audio_path)
 
         client = OpenAI(api_key=api_key)

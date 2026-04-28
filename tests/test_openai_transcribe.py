@@ -9,10 +9,12 @@ import pytest
 
 
 class TestConfigLoading:
-    def test_load_config_defaults_to_local_backend(self):
-        from src.process import load_config
+    def test_load_config_defaults_to_local_backend(self, monkeypatch):
+        from src import process
+        # Stub load_dotenv so the real .env on disk doesn't leak into the test.
+        monkeypatch.setattr(process, "load_dotenv", lambda *a, **kw: None)
         with patch.dict(os.environ, {"HF_TOKEN": "hf_x"}, clear=True):
-            cfg = load_config()
+            cfg = process.load_config()
         assert cfg["transcribe_backend"] == "local"
 
     def test_load_config_reads_openai_backend(self):
@@ -50,17 +52,17 @@ def _make_test_video(path: Path, duration_sec: int = 3) -> Path:
 
 
 class TestAudioExtraction:
-    def test_extract_audio_creates_opus_file(self, tmp_path):
+    def test_extract_audio_creates_ogg_file(self, tmp_path):
         from src.openai_transcribe import extract_audio_to_opus
         video = _make_test_video(tmp_path / "in.mp4", duration_sec=3)
-        out = extract_audio_to_opus(video, tmp_path / "out.opus")
+        out = extract_audio_to_opus(video, tmp_path / "out.ogg")
         assert out.exists()
-        assert out.suffix == ".opus"
+        assert out.suffix == ".ogg"
 
     def test_extract_audio_uses_mono_32kbps(self, tmp_path):
         from src.openai_transcribe import extract_audio_to_opus
         video = _make_test_video(tmp_path / "in.mp4", duration_sec=3)
-        out = extract_audio_to_opus(video, tmp_path / "out.opus")
+        out = extract_audio_to_opus(video, tmp_path / "out.ogg")
         # Probe the output
         result = subprocess.run(
             ["ffprobe", "-v", "quiet", "-show_streams", "-select_streams", "a:0",
@@ -73,7 +75,7 @@ class TestAudioExtraction:
     def test_extract_audio_raises_on_missing_input(self, tmp_path):
         from src.openai_transcribe import extract_audio_to_opus
         with pytest.raises(RuntimeError, match="ffmpeg failed"):
-            extract_audio_to_opus(tmp_path / "missing.mp4", tmp_path / "out.opus")
+            extract_audio_to_opus(tmp_path / "missing.mp4", tmp_path / "out.ogg")
 
 
 class TestSizeValidation:
