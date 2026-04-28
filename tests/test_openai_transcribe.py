@@ -1,6 +1,9 @@
 """Tests for OpenAI transcribe backend."""
 
 import os
+import subprocess
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -34,11 +37,6 @@ class TestConfigLoading:
             cfg = load_config()
         assert cfg["openai_api_key"] == "sk-x"
         assert cfg["openai_transcribe_model"] == "whisper-1"
-
-
-import subprocess
-import tempfile
-from pathlib import Path
 
 
 def _make_test_video(path: Path, duration_sec: int = 3) -> Path:
@@ -77,3 +75,25 @@ class TestAudioExtraction:
         from src.openai_transcribe import extract_audio_to_opus
         with pytest.raises(RuntimeError, match="ffmpeg failed"):
             extract_audio_to_opus(tmp_path / "missing.mp4", tmp_path / "out.opus")
+
+
+class TestSizeValidation:
+    def test_accepts_file_under_limit(self, tmp_path):
+        from src.openai_transcribe import validate_audio_size
+        f = tmp_path / "audio.opus"
+        f.write_bytes(b"\x00" * 1000)
+        validate_audio_size(f)  # No exception
+
+    def test_rejects_file_over_25mb(self, tmp_path):
+        from src.openai_transcribe import validate_audio_size
+        f = tmp_path / "audio.opus"
+        f.write_bytes(b"\x00" * (26 * 1024 * 1024))
+        with pytest.raises(ValueError, match="exceeds 25 MB"):
+            validate_audio_size(f)
+
+    def test_error_message_suggests_chunking(self, tmp_path):
+        from src.openai_transcribe import validate_audio_size
+        f = tmp_path / "audio.opus"
+        f.write_bytes(b"\x00" * (30 * 1024 * 1024))
+        with pytest.raises(ValueError, match="2 hour"):
+            validate_audio_size(f)
