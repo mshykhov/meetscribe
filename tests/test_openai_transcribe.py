@@ -285,3 +285,96 @@ class TestTranscribeViaOpenAI:
         out = openai_transcribe.transcribe_via_openai(video, api_key="sk-x", model="whisper-1", language=None)
         assert out["language"] == "en"
         assert mock_client.audio.transcriptions.create.call_count == 3
+
+
+class TestTranscribeDispatcher:
+    def test_dispatches_to_openai_when_backend_openai(self, tmp_path, monkeypatch):
+        """When TRANSCRIBE_BACKEND=openai, transcribe() must call openai_transcribe.transcribe_via_openai
+        for steps 1+2 (skipping local whisperx) and still run diarize via _run_step."""
+        from src import process, openai_transcribe
+
+        video = _make_test_video(tmp_path / "v.mp4", duration_sec=2)
+
+        openai_called = {"v": False}
+        def fake_openai(video_path, api_key, model, language):
+            openai_called["v"] = True
+            return {
+                "segments": [{"start": 0.0, "end": 1.0, "text": "Hi", "words": []}],
+                "language": "en",
+            }
+
+        run_step_scripts = []
+        def fake_run_step(script, tmp_dir, timeout=3600):
+            import json
+            run_step_scripts.append(script)
+            # Simulate diarize: read existing data, add speaker, write back.
+            data_file = tmp_dir / "pipeline_data.json"
+            data = json.loads(data_file.read_text())
+            for seg in data["segments"]:
+                seg["speaker"] = "SPEAKER_00"
+            data_file.write_text(json.dumps(data))
+
+        monkeypatch.setattr(openai_transcribe, "transcribe_via_openai", fake_openai)
+        monkeypatch.setattr(process, "_run_step", fake_run_step)
+
+        cfg = {
+            "transcribe_backend": "openai",
+            "openai_api_key": "sk-x",
+            "openai_transcribe_model": "whisper-1",
+            "language": None,
+            "whisper_model": "medium",
+            "hf_token": "hf_x",
+            "max_speakers": None,
+        }
+        result = process.transcribe(str(video), cfg)
+
+        assert openai_called["v"] is True, "openai backend was not invoked"
+        # When backend=openai, _run_step is called ONLY for diarize (1 call), not transcribe+align (which would be 3 total)
+        assert len(run_step_scripts) == 1, (
+            f"_run_step called {len(run_step_scripts)} times; expected 1 (diarize only). "
+            f"This means the local transcribe/align path was wrongly invoked."
+        )
+        assert "DiarizationPipeline" in run_step_scripts[0], "the single _run_step call wasn't diarize"
+        assert result["language"] == "en"
+        assert result["segments"][0]["speaker"] == "SPEAKER_00"
+
+    def test_uses_local_path_when_backend_local(self, tmp_path, monkeypatch):
+        """When backend=local (default), transcribe() must NOT call transcribe_via_openai."""
+        from src import process, openai_transcribe
+
+        video = _make_test_video(tmp_path / "v.mp4", duration_sec=2)
+
+        openai_called = {"v": False}
+        def fake_openai(*args, **kwargs):
+            openai_called["v"] = True
+            raise AssertionError("openai backend was called when backend=local")
+
+        run_step_scripts = []
+        def fake_run_step(script, tmp_dir, timeout=3600):
+            import json
+            run_step_scripts.append(script)
+            data_file = tmp_dir / "pipeline_data.json"
+            # Simulate any of the 3 _run_step calls writing minimal data
+            data_file.write_text(json.dumps({
+                "segments": [{"start": 0.0, "end": 1.0, "text": "Hi", "speaker": "SPEAKER_00"}],
+                "language": "en",
+            }))
+
+        monkeypatch.setattr(openai_transcribe, "transcribe_via_openai", fake_openai)
+        monkeypatch.setattr(process, "_run_step", fake_run_step)
+
+        cfg = {
+            "transcribe_backend": "local",
+            "openai_api_key": "",
+            "openai_transcribe_model": "whisper-1",
+            "language": None,
+            "whisper_model": "medium",
+            "hf_token": "hf_x",
+            "max_speakers": None,
+        }
+        result = process.transcribe(str(video), cfg)
+
+        assert openai_called["v"] is False
+        # Local path runs: transcribe + align + diarize = 3 _run_step calls
+        assert len(run_step_scripts) == 3, f"expected 3 _run_step calls (transcribe + align + diarize), got {len(run_step_scripts)}"
+        assert result["language"] == "en"

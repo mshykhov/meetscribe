@@ -193,9 +193,23 @@ def transcribe(video_path: str, cfg: dict) -> dict:
     data_file = tmp_dir / "pipeline_data.json"
 
     try:
-        # Step 1: Transcribe in isolated subprocess
-        print(f"[1/4] Transcribing ({cfg['whisper_model']}, MLX GPU)...")
-        _run_step(f"""
+        backend = cfg.get("transcribe_backend", "local")
+        if backend == "openai":
+            print(f"[1/3] Transcribing via OpenAI ({cfg['openai_transcribe_model']})...")
+            from src.openai_transcribe import transcribe_via_openai
+            import json
+            data = transcribe_via_openai(
+                Path(video_path),
+                api_key=cfg["openai_api_key"],
+                model=cfg["openai_transcribe_model"],
+                language=cfg.get("language"),
+            )
+            data_file.write_text(json.dumps(data))
+            print(f"       Detected language: {data['language']}")
+        else:
+            # Step 1: Transcribe in isolated subprocess
+            print(f"[1/4] Transcribing ({cfg['whisper_model']}, MLX GPU)...")
+            _run_step(f"""
 import json
 from pathlib import Path
 import whisperx_mlx
@@ -215,14 +229,14 @@ Path({str(data_file)!r}).write_text(json.dumps({{
 }}))
 """, tmp_dir)
 
-        import json
-        data = json.loads(data_file.read_text())
-        language = data["language"]
-        print(f"       Detected language: {language}")
+            import json
+            data = json.loads(data_file.read_text())
+            language = data["language"]
+            print(f"       Detected language: {language}")
 
-        # Step 2: Align in isolated subprocess
-        print("[2/4] Aligning words...")
-        _run_step(f"""
+            # Step 2: Align in isolated subprocess
+            print("[2/4] Aligning words...")
+            _run_step(f"""
 import json
 from pathlib import Path
 import whisperx_mlx
@@ -242,7 +256,7 @@ Path({str(data_file)!r}).write_text(json.dumps({{
 }}))
 """, tmp_dir)
 
-        data = json.loads(data_file.read_text())
+            data = json.loads(data_file.read_text())
 
         # Step 3: Diarize in isolated subprocess
         print("[3/4] Diarizing speakers...")
