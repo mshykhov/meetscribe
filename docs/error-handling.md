@@ -12,7 +12,7 @@ flowchart TD
         L1Run[handler runs python -m src.process]
         L1Exit{exit code}
         L1Append[append to .failed]
-        L1Count{fail count >= MAX_RETRIES (3)?}
+        L1Count{"fail count >= MAX_RETRIES (3)?"}
         L1Skip[skip permanently]
         L1Touch[touch WATCH_DIR -> launchd retrigger]
     end
@@ -27,7 +27,7 @@ flowchart TD
     subgraph L3["Level 3 - API (openai_transcribe.py)"]
         L3Call[client.audio.transcriptions.create]
         L3Catch{ConnectionError / APIConnectionError / APITimeoutError?}
-        L3AttemptCheck{attempt < MAX_RETRIES (3)?}
+        L3AttemptCheck{"attempt < MAX_RETRIES (3)?"}
         L3Sleep[sleep RETRY_BACKOFF_SEC * attempt]
         L3Raise[raise]
     end
