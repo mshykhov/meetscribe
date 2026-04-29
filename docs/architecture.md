@@ -64,3 +64,4 @@ flowchart TD
 | Как handler детектит и обрабатывает файлы | [watch-handler.md](watch-handler.md) |
 | Что происходит при ошибках, как retry устроен | [error-handling.md](error-handling.md) |
 | Почему такие технические решения | [adr/README.md](adr/README.md) |
+| Куда движется архитектура (Phase 2+) | [roadmap.md](roadmap.md) |
