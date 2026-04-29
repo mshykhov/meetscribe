@@ -15,6 +15,10 @@ from src.state.operations import (
     get_video,
     get_attempts,
     get_events,
+    transition_state,
+    record_event,
+    mark_skipped,
+    mark_for_retry,
 )
 
 __all__ = [
@@ -32,4 +36,8 @@ __all__ = [
     "get_video",
     "get_attempts",
     "get_events",
+    "transition_state",
+    "record_event",
+    "mark_skipped",
+    "mark_for_retry",
 ]

@@ -1,5 +1,10 @@
-"""meetscribe CLI - typer entry point. Subcommands: ls, show, migrate, process."""
+"""meetscribe CLI - typer entry point.
 
+Subcommands: ls, show, migrate, process, retry, skip, reprocess, daemon.
+"""
+
+import os
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -88,6 +93,105 @@ def process(video: Path) -> None:
     """Process a video (alias for python -m src.process)."""
     from src.process import process_video
     process_video(str(video))
+
+
+import time as _time
+
+
+@app.command()
+def retry(id_or_path: str) -> None:
+    """Reset video state to 'detected' so daemon will reprocess it."""
+    with state.connection() as conn:
+        runner.apply_migrations(conn)
+        video = state.get_video(conn, id_or_path)
+        if video is None:
+            typer.echo(f"Video not found: {id_or_path}", err=True)
+            raise typer.Exit(code=1)
+        state.mark_for_retry(conn, video["id"])
+    typer.echo(f"Marked for retry: {video['path']}")
+
+
+@app.command()
+def skip(id_or_path: str) -> None:
+    """Mark video as skipped (daemon will not process it again)."""
+    with state.connection() as conn:
+        runner.apply_migrations(conn)
+        video = state.get_video(conn, id_or_path)
+        if video is None:
+            typer.echo(f"Video not found: {id_or_path}", err=True)
+            raise typer.Exit(code=1)
+        state.mark_skipped(conn, video["id"], reason="user request")
+    typer.echo(f"Skipped: {video['path']}")
+
+
+@app.command()
+def reprocess(id_or_path: str) -> None:
+    """Archive existing output_dir (rename) and reset state to 'detected'."""
+    with state.connection() as conn:
+        runner.apply_migrations(conn)
+        video = state.get_video(conn, id_or_path)
+        if video is None:
+            typer.echo(f"Video not found: {id_or_path}", err=True)
+            raise typer.Exit(code=1)
+        out_path = video.get("output_path")
+        if out_path:
+            out = Path(out_path)
+            if out.exists():
+                archived = out.parent / f"{out.name}.archived-{int(_time.time())}"
+                out.rename(archived)
+                typer.echo(f"Archived old output: {archived}")
+        state.mark_for_retry(conn, video["id"])
+    typer.echo(f"Reset for reprocessing: {video['path']}")
+
+
+daemon_app = typer.Typer(help="Watcher daemon management")
+app.add_typer(daemon_app, name="daemon")
+
+DAEMON_LABEL = "com.myron.meetscribe.watcher"
+
+
+def _domain() -> str:
+    return f"gui/{os.getuid()}"
+
+
+@daemon_app.command("status")
+def daemon_status() -> None:
+    """Show launchd status of meetscribed-watcher."""
+    result = subprocess.run(
+        ["launchctl", "print", f"{_domain()}/{DAEMON_LABEL}"],
+        capture_output=True, text=True,
+    )
+    if result.returncode == 0:
+        typer.echo(result.stdout)
+    else:
+        typer.echo("Not loaded")
+
+
+@daemon_app.command("logs")
+def daemon_logs(tail_n: int = typer.Option(50, "--tail", "-n")) -> None:
+    """Tail watcher.log."""
+    project_root = Path(__file__).parent.parent
+    log_path = project_root / ".logs" / "watcher.log"
+    if not log_path.exists():
+        typer.echo(f"Log file does not exist: {log_path}", err=True)
+        raise typer.Exit(code=1)
+    subprocess.run(["tail", "-n", str(tail_n), str(log_path)])
+
+
+@daemon_app.command("restart")
+def daemon_restart() -> None:
+    """Bootout + bootstrap watcher."""
+    plist_dst = Path.home() / "Library" / "LaunchAgents" / f"{DAEMON_LABEL}.plist"
+    subprocess.run(["launchctl", "bootout", f"{_domain()}/{DAEMON_LABEL}"], capture_output=True)
+    subprocess.run(["launchctl", "bootstrap", _domain(), str(plist_dst)], capture_output=True)
+    typer.echo("Restarted.")
+
+
+@daemon_app.command("stop")
+def daemon_stop() -> None:
+    """Bootout watcher (auto-restart on next system event due to KeepAlive=true)."""
+    subprocess.run(["launchctl", "bootout", f"{_domain()}/{DAEMON_LABEL}"], capture_output=True)
+    typer.echo("Stopped.")
 
 
 if __name__ == "__main__":

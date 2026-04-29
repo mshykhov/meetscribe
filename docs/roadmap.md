@@ -70,7 +70,7 @@ PR: [#1](https://github.com/mshykhov/meetscribe/pull/1) (squash-merged 2026-04-2
 - `meetscribe ls` показывает то же что `cat .processed` (для done) и `cat .failed | sort -u` (для failed).
 - `.processed`/`.failed` всё ещё authoritative для handler-логики.
 
-### Phase 3b: meetscribed-watcher daemon (pending)
+### Phase 3b: meetscribed-watcher daemon (done)
 
 Python daemon заменяет `watch-handler.sh`. launchd plist `com.myron.meetscribe.watcher` (KeepAlive=true). FSEvent через библиотеку (вероятно `watchdog`). Stability check inline. State.db становится authoritative; `.processed`/`.failed` retired.
 
@@ -135,7 +135,7 @@ Variant A из [ADR-0003](adr/0003-openai-backend-base-url-for-groq-compat.md): 
 | Phase 1: snapshot docs | done | [#1](https://github.com/mshykhov/meetscribe/pull/1) | 7 ADRs (0001-0007) + 4 architecture docs |
 | Phase 2: target roadmap | done | 2700b0b | 7 ADRs (0008-0014) + roadmap.md + ADR-0005 superseded |
 | Phase 3a: state.db parallel | done | (direct merge) | state.db schema, src/state/ subpackage, meetscribe CLI, process.py wires writes |
-| Phase 3b: watcher daemon | pending | | |
+| Phase 3b: watcher daemon | done | (direct merge) | Python daemon replaces shell handler; CLI retry/skip/reprocess/daemon; ADRs 0017-0018 |
 | Phase 3c: worker on-demand | pending | | |
 | Phase 3d: SwiftBar push | pending | | |
 | Phase 3e: notifications + sidecar + TUI | pending | | |

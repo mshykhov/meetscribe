@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.myron.meetscribe.watcher</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/myron/projects/meetscribe/.venv/bin/python</string>
+        <string>-m</string>
+        <string>src.watcher</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/myron/projects/meetscribe</string>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>LowPriorityIO</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/myron/projects/meetscribe/.logs/watcher.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/myron/projects/meetscribe/.logs/watcher.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/opt/homebrew/opt/ffmpeg/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/myron</string>
+        <key>KMP_DUPLICATE_LIB_OK</key>
+        <string>TRUE</string>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
+</dict>
+</plist>

@@ -3,9 +3,10 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PLIST_NAME="com.myron.meetscribe"
+PLIST_NAME="com.myron.meetscribe.watcher"
 PLIST_SRC="$PROJECT_DIR/$PLIST_NAME.plist"
 PLIST_DST="$HOME/Library/LaunchAgents/$PLIST_NAME.plist"
+PLIST_OLD_NAME="com.myron.meetscribe"
 DOMAIN="gui/$(id -u)"
 
 case "${1:-install}" in
@@ -44,14 +45,15 @@ case "${1:-install}" in
         mkdir -p "$OUTPUT_DIR"
         echo "Output directory: $OUTPUT_DIR"
 
-        # Unload if already loaded
+        # Unload OLD plist if still loaded (Phase 3a era)
+        launchctl bootout "$DOMAIN/$PLIST_OLD_NAME" 2>/dev/null || true
+        rm -f "$HOME/Library/LaunchAgents/$PLIST_OLD_NAME.plist"
+
+        # Unload new plist if already loaded
         launchctl bootout "$DOMAIN/$PLIST_NAME" 2>/dev/null || true
 
-        # Install plist
+        # Install new plist (no WatchPaths - daemon listens via watchdog)
         cp "$PLIST_SRC" "$PLIST_DST"
-
-        # Update WatchPaths in plist to match .env
-        /usr/libexec/PlistBuddy -c "Set :WatchPaths:0 $WATCH_DIR" "$PLIST_DST"
 
         chmod 644 "$PLIST_DST"
         plutil -lint "$PLIST_DST"
@@ -87,7 +89,7 @@ case "${1:-install}" in
         ;;
 
     logs)
-        tail -f "$PROJECT_DIR/.logs/pipeline.log"
+        tail -f "$PROJECT_DIR/.logs/watcher.log"
         ;;
 
     health)
@@ -172,10 +174,10 @@ case "${1:-install}" in
             echo "[WARN] Failed files: $failed_unique (run: $0 retry)"
         fi
 
-        # 9. Last log entry
-        if [ -f "$PROJECT_DIR/.logs/pipeline.log" ]; then
-            last_log=$(tail -1 "$PROJECT_DIR/.logs/pipeline.log")
-            echo "[INFO] Last log: $last_log"
+        # 9. Last log entry from watcher daemon
+        if [ -f "$PROJECT_DIR/.logs/watcher.log" ]; then
+            last_log=$(tail -1 "$PROJECT_DIR/.logs/watcher.log")
+            echo "[INFO] Last watcher log: $last_log"
         fi
 
         echo ""
@@ -186,40 +188,9 @@ case "${1:-install}" in
         fi
         ;;
 
-    retry)
-        echo "Resetting failed files for retry..."
-        if [ -f "$PROJECT_DIR/.failed" ]; then
-            failed_count=$(sort -u "$PROJECT_DIR/.failed" | wc -l | tr -d ' ')
-            rm -f "$PROJECT_DIR/.failed"
-            echo "Cleared $failed_count failed entries. Next trigger will retry them."
-            echo "Touch the watch dir to trigger: touch \"$(grep '^WATCH_DIR=' "$PROJECT_DIR/.env" | cut -d= -f2-)\""
-        else
-            echo "No failed files."
-        fi
-        ;;
-
-    reprocess)
-        if [ -z "${2:-}" ]; then
-            echo "Usage: $0 reprocess /path/to/video.mp4"
-            exit 1
-        fi
-        video="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
-        # Remove from processed log
-        if [ -f "$PROJECT_DIR/.processed" ]; then
-            grep -vxF "$video" "$PROJECT_DIR/.processed" > "$PROJECT_DIR/.processed.tmp" || true
-            mv "$PROJECT_DIR/.processed.tmp" "$PROJECT_DIR/.processed"
-        fi
-        # Remove from failed log
-        if [ -f "$PROJECT_DIR/.failed" ]; then
-            grep -vxF "$video" "$PROJECT_DIR/.failed" > "$PROJECT_DIR/.failed.tmp" || true
-            mv "$PROJECT_DIR/.failed.tmp" "$PROJECT_DIR/.failed"
-        fi
-        echo "Removed $video from processed/failed logs."
-        echo "Touch the watch dir to trigger reprocessing."
-        ;;
-
     *)
-        echo "Usage: $0 {install|uninstall|status|logs|health|retry|reprocess}"
+        echo "Usage: $0 {install|uninstall|status|logs|health}"
+        echo "Note: retry/reprocess moved to: meetscribe retry / meetscribe reprocess"
         exit 1
         ;;
 esac

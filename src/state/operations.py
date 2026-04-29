@@ -126,6 +126,61 @@ def fail_attempt(
     )
 
 
+def transition_state(
+    conn: sqlite3.Connection,
+    video_id: int,
+    new_state: str,
+    extra_event_details: dict | None = None,
+) -> None:
+    """UPDATE videos.state and INSERT a state-change event."""
+    now = _now()
+    conn.execute(
+        "UPDATE videos SET state = ?, updated_at = ? WHERE id = ?",
+        (new_state, now, video_id),
+    )
+    details = {"new_state": new_state}
+    if extra_event_details:
+        details.update(extra_event_details)
+    conn.execute(
+        "INSERT INTO events (video_id, ts, event_type, details) VALUES (?, ?, ?, ?)",
+        (video_id, now, f"state_{new_state}", json.dumps(details)),
+    )
+
+
+def record_event(
+    conn: sqlite3.Connection,
+    video_id: int | None,
+    event_type: str,
+    details: dict | None = None,
+) -> None:
+    """Standalone event row insertion; for events that don't change state."""
+    conn.execute(
+        "INSERT INTO events (video_id, ts, event_type, details) VALUES (?, ?, ?, ?)",
+        (video_id, _now(), event_type, json.dumps(details) if details else None),
+    )
+
+
+def mark_skipped(conn: sqlite3.Connection, video_id: int, reason: str | None = None) -> None:
+    """Mark video as skipped (daemon will not process again)."""
+    extras = {"reason": reason} if reason else None
+    transition_state(conn, video_id, "skipped", extra_event_details=extras)
+
+
+def mark_for_retry(conn: sqlite3.Connection, video_id: int) -> None:
+    """Reset state to 'detected' so daemon picks up. Clears terminal fields."""
+    now = _now()
+    conn.execute(
+        "UPDATE videos SET state = 'detected', last_error = NULL, completed_at = NULL, "
+        "current_stage = NULL, progress = NULL, output_path = NULL, updated_at = ? "
+        "WHERE id = ?",
+        (now, video_id),
+    )
+    conn.execute(
+        "INSERT INTO events (video_id, ts, event_type, details) VALUES (?, ?, 'retried', ?)",
+        (video_id, now, json.dumps({"by": "user"})),
+    )
+
+
 def list_videos(
     conn: sqlite3.Connection,
     state: str | None = None,
