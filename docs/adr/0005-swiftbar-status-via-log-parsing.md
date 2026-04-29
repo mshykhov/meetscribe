@@ -1,6 +1,6 @@
 # ADR-0005: SwiftBar plugin reads pipeline state via log parsing
 
-Status: Accepted
+Status: Superseded by [ADR-0011](./0011-swiftbar-url-scheme-refresh.md)
 Date: 2026-04-29
 
 ## Context
