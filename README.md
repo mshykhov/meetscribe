@@ -52,6 +52,14 @@ Key `.env` options: `HF_TOKEN` (required), `WATCH_DIR`, `OUTPUT_DIR`, `WHISPER_M
 
 Recommended model: `medium` (best quality/speed balance on Apple Silicon).
 
+## Documentation
+
+- [Architecture overview](docs/architecture.md) - components and how they fit together
+- [Pipeline](docs/pipeline.md) - 4-stage processing flow
+- [Watch handler](docs/watch-handler.md) - file lifecycle and lock
+- [Error handling](docs/error-handling.md) - retry layers and failure modes
+- [Architecture Decision Records](docs/adr/README.md) - rationale for non-obvious choices
+
 ## Stack
 
 - **WhisperX-MLX** - transcription with MLX GPU acceleration
