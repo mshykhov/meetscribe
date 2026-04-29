@@ -3,17 +3,24 @@
 
 import argparse
 import gc
+import logging
 import os
 import re
 import shutil
 import signal
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
 import whisperx_mlx
 from dotenv import load_dotenv
+
+from src import state
+from src.state import runner as _state_runner
+
+_log = logging.getLogger(__name__)
 
 # Use cached models, skip update checks
 os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
@@ -175,7 +182,7 @@ def _run_step(step_script: str, tmp_dir: Path, timeout: int = WHISPERX_TIMEOUT_S
         raise RuntimeError(f"Pipeline step failed with exit code {result.returncode}")
 
 
-def transcribe(video_path: str, cfg: dict) -> dict:
+def transcribe(video_path: str, cfg: dict, video_id: int | None = None) -> dict:
     duration = get_audio_duration(video_path)
     duration_min = int(duration // 60)
 
@@ -194,6 +201,8 @@ def transcribe(video_path: str, cfg: dict) -> dict:
 
     try:
         backend = cfg.get("transcribe_backend", "local")
+        if video_id is not None:
+            _safe_state(state.set_current_stage, video_id, "transcribe")
         if backend == "openai":
             print(f"[1/4] Transcribing via OpenAI ({cfg['openai_transcribe_model']})...")
             from src.openai_transcribe import transcribe_via_openai
@@ -235,6 +244,8 @@ Path({str(data_file)!r}).write_text(json.dumps({{
             print(f"       Detected language: {language}")
 
             # Step 2: Align in isolated subprocess
+            if video_id is not None:
+                _safe_state(state.set_current_stage, video_id, "align")
             print("[2/4] Aligning words...")
             _run_step(f"""
 import json
@@ -259,6 +270,8 @@ Path({str(data_file)!r}).write_text(json.dumps({{
             data = json.loads(data_file.read_text())
 
         # Step 3: Diarize in isolated subprocess
+        if video_id is not None:
+            _safe_state(state.set_current_stage, video_id, "diarize")
         print("[3/4] Diarizing speakers...")
         max_diarize_attempts = 3
         diarize_ok = False
@@ -351,6 +364,21 @@ def call_claude(prompt: str, cfg: dict, timeout: int = 600) -> str:
     if result.returncode != 0:
         raise RuntimeError(f"Claude CLI failed: {result.stderr}")
     return result.stdout.strip()
+
+
+def _safe_state(callable_, *args, **kwargs):
+    """Run a state.db write callable, swallowing exceptions.
+
+    State writes are observability, not critical path. If the db is unwritable,
+    pipeline must still complete. Errors are logged.
+    """
+    try:
+        with state.connection() as conn:
+            _state_runner.apply_migrations(conn)
+            return callable_(conn, *args, **kwargs)
+    except Exception as e:
+        _log.warning("state.db write failed: %s", e)
+        return None
 
 
 def generate_summary(transcript: str, cfg: dict) -> str:
@@ -472,32 +500,61 @@ def process_video(video_path: str) -> Path:
     print(f"Processing: {video_path}")
     print("=" * 60)
 
-    result = transcribe(video_path, cfg)
-    transcript = build_transcript(result)
+    abs_path = str(Path(video_path).resolve())
+    backend = cfg.get("transcribe_backend", "local")
 
-    print(f"\nTranscript: {len(result['segments'])} segments")
-
-    tmp_transcript = cfg["output_dir"] / f".tmp-{date_str}-transcript.txt"
-    tmp_transcript.parent.mkdir(parents=True, exist_ok=True)
-    tmp_transcript.write_text(transcript, encoding="utf-8")
-
-    print(f"[4/4] Generating summary with Claude...")
-    try:
-        summary = generate_summary(transcript, cfg)
-    except Exception as e:
-        print(f"WARNING: Summary generation failed: {e}")
-        summary = (
-            "### Короткое название\nmeeting\n\n"
-            f"### Summary unavailable\n\nError: {e}\n\n"
-            "Transcript was saved successfully."
+    def _start(conn):
+        size_bytes = Path(video_path).stat().st_size if Path(video_path).exists() else None
+        duration_sec = get_audio_duration(video_path) if Path(video_path).exists() else None
+        vid = state.record_video_seen(
+            conn, path=abs_path, detected_at=int(time.time()),
+            size_bytes=size_bytes, duration_sec=duration_sec,
         )
+        attempt_id = state.start_attempt(conn, vid, backend)
+        return vid, attempt_id
 
-    output_dir = organize_files(video_path, transcript, summary, date_str, cfg)
-    tmp_transcript.unlink(missing_ok=True)
+    started = _safe_state(_start)
+    video_id, attempt_id = (started if started is not None else (None, None))
 
-    print("=" * 60)
-    print(f"Done! Output: {output_dir}")
-    return output_dir
+    stage_reached = "transcribe"
+    try:
+        result = transcribe(video_path, cfg, video_id=video_id)
+        stage_reached = "diarize"
+        transcript = build_transcript(result)
+
+        print(f"\nTranscript: {len(result['segments'])} segments")
+
+        tmp_transcript = cfg["output_dir"] / f".tmp-{date_str}-transcript.txt"
+        tmp_transcript.parent.mkdir(parents=True, exist_ok=True)
+        tmp_transcript.write_text(transcript, encoding="utf-8")
+
+        if video_id is not None:
+            _safe_state(state.set_current_stage, video_id, "summary")
+        print(f"[4/4] Generating summary with Claude...")
+        stage_reached = "summary"
+        try:
+            summary = generate_summary(transcript, cfg)
+        except Exception as e:
+            print(f"WARNING: Summary generation failed: {e}")
+            summary = (
+                "### Короткое название\nmeeting\n\n"
+                f"### Summary unavailable\n\nError: {e}\n\n"
+                "Transcript was saved successfully."
+            )
+
+        output_dir = organize_files(video_path, transcript, summary, date_str, cfg)
+        tmp_transcript.unlink(missing_ok=True)
+
+        if attempt_id is not None and video_id is not None:
+            _safe_state(state.complete_attempt, attempt_id, video_id, str(output_dir))
+
+        print("=" * 60)
+        print(f"Done! Output: {output_dir}")
+        return output_dir
+    except Exception as e:
+        if attempt_id is not None and video_id is not None:
+            _safe_state(state.fail_attempt, attempt_id, video_id, str(e), stage_reached)
+        raise
 
 
 def main():

@@ -59,7 +59,7 @@ PR: [#1](https://github.com/mshykhov/meetscribe/pull/1) (squash-merged 2026-04-2
 
 7 ADRs (0008-0014) + roadmap.md + ADR-0005 superseded.
 
-### Phase 3a: state.db parallel write (pending)
+### Phase 3a: state.db parallel write (done)
 
 Создать SQLite schema (videos, attempts, events, rate_limits, schema_version). Existing `watch-handler.sh` + `process.py` пишут в state.db parallel к `.processed`/`.failed`. Reads всё ещё через файлы. CLI `meetscribe ls` (read-only на state.db) - smoke test что данные пишутся.
 
@@ -133,8 +133,8 @@ Variant A из [ADR-0003](adr/0003-openai-backend-base-url-for-groq-compat.md): 
 | Phase | Status | PR | Notes |
 |---|---|---|---|
 | Phase 1: snapshot docs | done | [#1](https://github.com/mshykhov/meetscribe/pull/1) | 7 ADRs (0001-0007) + 4 architecture docs |
-| Phase 2: target roadmap | in progress | (this PR) | 7 ADRs (0008-0014) + roadmap.md + ADR-0005 superseded |
-| Phase 3a: state.db parallel | pending | | |
+| Phase 2: target roadmap | done | 2700b0b | 7 ADRs (0008-0014) + roadmap.md + ADR-0005 superseded |
+| Phase 3a: state.db parallel | done | (direct merge) | state.db schema, src/state/ subpackage, meetscribe CLI, process.py wires writes |
 | Phase 3b: watcher daemon | pending | | |
 | Phase 3c: worker on-demand | pending | | |
 | Phase 3d: SwiftBar push | pending | | |

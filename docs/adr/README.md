@@ -20,6 +20,8 @@
 | [0012](0012-phased-migration-strategy.md) | Phased migration over big-bang | Accepted | 2026-04-29 |
 | [0013](0013-path-only-video-identity.md) | Path-only video identity | Accepted | 2026-04-29 |
 | [0014](0014-blob-partial-data-for-crash-recovery.md) | BLOB partial_data for crash recovery | Accepted | 2026-04-29 |
+| [0015](0015-typer-as-cli-framework.md) | typer as CLI framework | Accepted | 2026-04-29 |
+| [0016](0016-sql-file-migrations.md) | SQL-file migrations | Accepted | 2026-04-29 |
 
 ## Как добавить новую ADR
 
