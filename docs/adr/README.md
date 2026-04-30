@@ -24,6 +24,8 @@
 | [0016](0016-sql-file-migrations.md) | SQL-file migrations | Accepted | 2026-04-29 |
 | [0017](0017-watchdog-library-and-threading-model.md) | watchdog library + threading | Accepted | 2026-04-29 |
 | [0018](0018-no-processed-failed-migration.md) | No migration of .processed/.failed | Accepted | 2026-04-29 |
+| [0019](0019-cancel-via-state-db-between-stages.md) | Cancel via state.db between stages | Accepted | 2026-04-30 |
+| [0020](0020-partial-data-writes-in-process-py.md) | partial_data writes in process.py | Accepted | 2026-04-30 |
 
 ## Как добавить новую ADR
 

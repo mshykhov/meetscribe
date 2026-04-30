@@ -3,9 +3,8 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PLIST_NAME="com.myron.meetscribe.watcher"
-PLIST_SRC="$PROJECT_DIR/$PLIST_NAME.plist"
-PLIST_DST="$HOME/Library/LaunchAgents/$PLIST_NAME.plist"
+PLIST_WATCHER_NAME="com.myron.meetscribe.watcher"
+PLIST_WORKER_NAME="com.myron.meetscribe.worker"
 PLIST_OLD_NAME="com.myron.meetscribe"
 DOMAIN="gui/$(id -u)"
 
@@ -49,17 +48,21 @@ case "${1:-install}" in
         launchctl bootout "$DOMAIN/$PLIST_OLD_NAME" 2>/dev/null || true
         rm -f "$HOME/Library/LaunchAgents/$PLIST_OLD_NAME.plist"
 
-        # Unload new plist if already loaded
-        launchctl bootout "$DOMAIN/$PLIST_NAME" 2>/dev/null || true
+        # Unload new plists if already loaded
+        launchctl bootout "$DOMAIN/$PLIST_WATCHER_NAME" 2>/dev/null || true
+        launchctl bootout "$DOMAIN/$PLIST_WORKER_NAME" 2>/dev/null || true
 
-        # Install new plist (no WatchPaths - daemon listens via watchdog)
-        cp "$PLIST_SRC" "$PLIST_DST"
+        # Install both plists
+        cp "$PROJECT_DIR/$PLIST_WATCHER_NAME.plist" "$HOME/Library/LaunchAgents/"
+        cp "$PROJECT_DIR/$PLIST_WORKER_NAME.plist" "$HOME/Library/LaunchAgents/"
+        chmod 644 "$HOME/Library/LaunchAgents/$PLIST_WATCHER_NAME.plist"
+        chmod 644 "$HOME/Library/LaunchAgents/$PLIST_WORKER_NAME.plist"
+        plutil -lint "$HOME/Library/LaunchAgents/$PLIST_WATCHER_NAME.plist"
+        plutil -lint "$HOME/Library/LaunchAgents/$PLIST_WORKER_NAME.plist"
 
-        chmod 644 "$PLIST_DST"
-        plutil -lint "$PLIST_DST"
-
-        # Load
-        launchctl bootstrap "$DOMAIN" "$PLIST_DST"
+        # Load both (worker is on-demand, won't run until launchctl start)
+        launchctl bootstrap "$DOMAIN" "$HOME/Library/LaunchAgents/$PLIST_WATCHER_NAME.plist"
+        launchctl bootstrap "$DOMAIN" "$HOME/Library/LaunchAgents/$PLIST_WORKER_NAME.plist"
 
         # SwiftBar menu bar plugin
         SWIFTBAR_DIR="$HOME/Library/Application Support/SwiftBar/Plugins"
@@ -79,13 +82,19 @@ case "${1:-install}" in
 
     uninstall)
         echo "Uninstalling meetscribe..."
-        launchctl bootout "$DOMAIN/$PLIST_NAME" 2>/dev/null || true
-        rm -f "$PLIST_DST"
+        launchctl bootout "$DOMAIN/$PLIST_WATCHER_NAME" 2>/dev/null || true
+        launchctl bootout "$DOMAIN/$PLIST_WORKER_NAME" 2>/dev/null || true
+        rm -f "$HOME/Library/LaunchAgents/$PLIST_WATCHER_NAME.plist"
+        rm -f "$HOME/Library/LaunchAgents/$PLIST_WORKER_NAME.plist"
         echo "Done."
         ;;
 
     status)
-        launchctl print "$DOMAIN/$PLIST_NAME" 2>/dev/null || echo "Not loaded"
+        echo "=== Watcher ==="
+        launchctl print "$DOMAIN/$PLIST_WATCHER_NAME" 2>/dev/null | head -20 || echo "Not loaded"
+        echo ""
+        echo "=== Worker ==="
+        launchctl print "$DOMAIN/$PLIST_WORKER_NAME" 2>/dev/null | head -20 || echo "Not loaded"
         ;;
 
     logs)
@@ -96,11 +105,17 @@ case "${1:-install}" in
         echo "=== Meetscribe Health Check ==="
         ok=true
 
-        # 1. launchd service
-        if launchctl print "$DOMAIN/$PLIST_NAME" &>/dev/null; then
-            echo "[OK] launchd service loaded"
+        # 1. launchd services
+        if launchctl print "$DOMAIN/$PLIST_WATCHER_NAME" &>/dev/null; then
+            echo "[OK] watcher service loaded"
         else
-            echo "[FAIL] launchd service NOT loaded. Run: $0 install"
+            echo "[FAIL] watcher service NOT loaded. Run: $0 install"
+            ok=false
+        fi
+        if launchctl print "$DOMAIN/$PLIST_WORKER_NAME" &>/dev/null; then
+            echo "[OK] worker service loaded"
+        else
+            echo "[FAIL] worker service NOT loaded. Run: $0 install"
             ok=false
         fi
 

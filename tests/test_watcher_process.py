@@ -11,13 +11,14 @@ from src import state, watcher
 
 @pytest.fixture
 def patched_subprocess(monkeypatch):
-    """Replace subprocess.run with a mock that records calls and returns success."""
+    """Replace subprocess.run with a mock; record launchctl start calls."""
     calls = []
     real_run = watcher.subprocess.run
 
     def fake_run(args, **kwargs):
-        # Pass through lsof / ffprobe / terminal-notifier; intercept python -m src.process
-        if args and args[0] == watcher.sys.executable and len(args) > 2 and args[2] == "src.process":
+        # Pass through lsof / ffprobe / terminal-notifier;
+        # intercept launchctl start (Phase 3c watcher signals worker via launchctl)
+        if args and args[0] == "launchctl" and len(args) > 1 and args[1] == "start":
             calls.append((args, kwargs))
             from subprocess import CompletedProcess
             return CompletedProcess(args=args, returncode=0)
@@ -41,9 +42,7 @@ def test_process_one_happy_path(conn, tmp_path, monkeypatch, patched_subprocess)
 
     assert len(patched_subprocess) == 1
     args, _ = patched_subprocess[0]
-    assert args[1] == "-m"
-    assert args[2] == "src.process"
-    assert args[3] == str(path.resolve())
+    assert args == ["launchctl", "start", "com.myron.meetscribe.worker"]
 
     with state.connection() as c:
         videos = state.list_videos(c)

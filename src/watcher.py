@@ -191,25 +191,15 @@ def _process_one(path_str: str, shutdown: threading.Event) -> None:
     with state.connection() as conn:
         state.transition_state(conn, video_id, "queued")
 
-    notify(f"Обработка {path.name}", "", sound="Blow")
+    notify(f"В очередь: {path.name}", "", sound="default")
 
     try:
-        result = subprocess.run(
-            [sys.executable, "-m", "src.process", abs_path],
-            cwd=str(Path(__file__).parent.parent),
+        subprocess.run(
+            ["launchctl", "start", "com.myron.meetscribe.worker"],
+            capture_output=True, timeout=5,
         )
     except Exception as e:
-        log.exception("subprocess.run error for %s", path_str)
-        with state.connection() as conn:
-            state.transition_state(conn, video_id, "failed",
-                                   extra_event_details={"reason": f"subprocess_error: {e}"})
-        notify("ОШИБКА запуска pipeline", path.name, sound="Basso")
-        return
-
-    if result.returncode == 0:
-        notify(f"Готово: {path.name}", "", sound="Glass")
-    else:
-        notify(f"ОШИБКА: {path.name}", "", sound="Basso")
+        log.warning("failed to launchctl start worker: %s", e)
 
 
 import queue as queue_module

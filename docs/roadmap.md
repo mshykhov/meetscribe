@@ -80,7 +80,7 @@ Python daemon заменяет `watch-handler.sh`. launchd plist `com.myron.meet
 - `process.py` всё ещё запускается per file (worker daemon ещё не существует).
 - `scripts/watch-handler.sh` retired (kept as `.deprecated.sh` one phase, потом deleted).
 
-### Phase 3c: meetscribed-worker on-demand (pending)
+### Phase 3c: meetscribed-worker on-demand (done)
 
 Wrap `process.py` в Python daemon. launchd plist `com.myron.meetscribe.worker` (KeepAlive=false, RunAtLoad=false). Watcher вызывает `launchctl start` после `state='queued'` write. Worker дренирует queue, обновляет progress + partial_data, exits на empty.
 
@@ -136,7 +136,7 @@ Variant A из [ADR-0003](adr/0003-openai-backend-base-url-for-groq-compat.md): 
 | Phase 2: target roadmap | done | 2700b0b | 7 ADRs (0008-0014) + roadmap.md + ADR-0005 superseded |
 | Phase 3a: state.db parallel | done | (direct merge) | state.db schema, src/state/ subpackage, meetscribe CLI, process.py wires writes |
 | Phase 3b: watcher daemon | done | (direct merge) | Python daemon replaces shell handler; CLI retry/skip/reprocess/daemon; ADRs 0017-0018 |
-| Phase 3c: worker on-demand | pending | | |
+| Phase 3c: worker on-demand | done | (direct merge) | Worker daemon launchctl-on-demand; partial_data crash recovery; cancel CLI; ADRs 0019-0020 |
 | Phase 3d: SwiftBar push | pending | | |
 | Phase 3e: notifications + sidecar + TUI | pending | | |
 | Phase 3f: web dashboard | pending | | optional |

@@ -144,6 +144,28 @@ def reprocess(id_or_path: str) -> None:
     typer.echo(f"Reset for reprocessing: {video['path']}")
 
 
+@app.command()
+def cancel(id_or_path: str) -> None:
+    """Cancel currently processing or queued video."""
+    with state.connection() as conn:
+        runner.apply_migrations(conn)
+        video = state.get_video(conn, id_or_path)
+        if video is None:
+            typer.echo(f"Video not found: {id_or_path}", err=True)
+            raise typer.Exit(code=1)
+        if video["state"] not in ("queued", "processing"):
+            typer.echo(
+                f"Cannot cancel video in state '{video['state']}'. "
+                "Only 'queued' or 'processing' allowed.",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        state.transition_state(conn, video["id"], "cancelled",
+                               extra_event_details={"by": "user"})
+    typer.echo(f"Cancelled: {video['path']}")
+    typer.echo("Worker will exit current stage and stop processing.")
+
+
 daemon_app = typer.Typer(help="Watcher daemon management")
 app.add_typer(daemon_app, name="daemon")
 
