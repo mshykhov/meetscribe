@@ -6,6 +6,12 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _disable_swiftbar(monkeypatch):
+    """Auto-applied: skip SwiftBar refresh trigger in tests."""
+    monkeypatch.setenv("MEETSCRIBE_DISABLE_SWIFTBAR", "1")
+
+
 @pytest.fixture
 def db_path(tmp_path: Path, monkeypatch) -> Path:
     target = tmp_path / "state.db"

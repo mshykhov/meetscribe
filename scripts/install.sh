@@ -64,11 +64,15 @@ case "${1:-install}" in
         launchctl bootstrap "$DOMAIN" "$HOME/Library/LaunchAgents/$PLIST_WATCHER_NAME.plist"
         launchctl bootstrap "$DOMAIN" "$HOME/Library/LaunchAgents/$PLIST_WORKER_NAME.plist"
 
-        # SwiftBar menu bar plugin
+        # SwiftBar menu bar plugin (Phase 3d: state.db driven, push refresh)
         SWIFTBAR_DIR="$HOME/Library/Application Support/SwiftBar/Plugins"
         if [ -d "/Applications/SwiftBar.app" ]; then
             mkdir -p "$SWIFTBAR_DIR"
-            ln -sf "$PROJECT_DIR/scripts/swiftbar-plugin.1s.sh" "$SWIFTBAR_DIR/meetscribe.1s.sh"
+            # Remove old symlinks (Phase 3a-3c era)
+            rm -f "$SWIFTBAR_DIR/meetscribe.1s.sh"
+            rm -f "$SWIFTBAR_DIR/swiftbar-plugin.1s.sh"
+            # New symlink
+            ln -sf "$PROJECT_DIR/scripts/meetscribe.5s.sh" "$SWIFTBAR_DIR/meetscribe.5s.sh"
             defaults write com.ameba.SwiftBar PluginDirectory "$SWIFTBAR_DIR"
             echo "SwiftBar plugin linked"
         else

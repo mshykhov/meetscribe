@@ -89,7 +89,7 @@ Wrap `process.py` в Python daemon. launchd plist `com.myron.meetscribe.worker` 
 - mid-pipeline crash + restart resumes от `partial_stage` (per [ADR-0014](adr/0014-blob-partial-data-for-crash-recovery.md)).
 - `meetscribe status` показывает live progress (читает `videos.progress` колонку).
 
-### Phase 3d: SwiftBar reads state.db + URL-scheme push (pending)
+### Phase 3d: SwiftBar reads state.db + URL-scheme push (done)
 
 Перевод `scripts/swiftbar-plugin.1s.sh` → `meetscribe.5s.sh` который читает state.db. Watcher + worker push refresh через `open "swiftbar://refreshplugin?name=meetscribe"`. Buttons [Retry] / [Cancel] / [Skip] / [Show] вызывают `meetscribe` CLI.
 
@@ -137,7 +137,7 @@ Variant A из [ADR-0003](adr/0003-openai-backend-base-url-for-groq-compat.md): 
 | Phase 3a: state.db parallel | done | (direct merge) | state.db schema, src/state/ subpackage, meetscribe CLI, process.py wires writes |
 | Phase 3b: watcher daemon | done | (direct merge) | Python daemon replaces shell handler; CLI retry/skip/reprocess/daemon; ADRs 0017-0018 |
 | Phase 3c: worker on-demand | done | (direct merge) | Worker daemon launchctl-on-demand; partial_data crash recovery; cancel CLI; ADRs 0019-0020 |
-| Phase 3d: SwiftBar push | pending | | |
+| Phase 3d: SwiftBar push | done | (direct merge) | Plugin reads state.db; URL-scheme refresh; meetscribe swiftbar CLI; ADR-0021 |
 | Phase 3e: notifications + sidecar + TUI | pending | | |
 | Phase 3f: web dashboard | pending | | optional |
 | Phase 3g: Groq | pending | | optional |

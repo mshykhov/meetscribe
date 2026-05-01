@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 
 from src import state
 from src.state import runner as _state_runner
+from src.swiftbar import notify_swiftbar_refresh
 
 _log = logging.getLogger(__name__)
 
@@ -212,6 +213,7 @@ def transcribe(video_path: str, cfg: dict, video_id: int | None = None) -> dict:
                 _check_cancelled(video_id)
                 if video_id is not None:
                     _safe_state(state.set_current_stage, video_id, "transcribe")
+                    notify_swiftbar_refresh()
                 print(f"[1/4] Transcribing via OpenAI ({cfg['openai_transcribe_model']})...")
                 from src.openai_transcribe import transcribe_via_openai
                 data = transcribe_via_openai(
@@ -233,6 +235,7 @@ def transcribe(video_path: str, cfg: dict, video_id: int | None = None) -> dict:
                 _check_cancelled(video_id)
                 if video_id is not None:
                     _safe_state(state.set_current_stage, video_id, "transcribe")
+                    notify_swiftbar_refresh()
                 print(f"[1/4] Transcribing ({cfg['whisper_model']}, MLX GPU)...")
                 _run_step(f"""
 import json
@@ -267,6 +270,7 @@ Path({str(data_file)!r}).write_text(json.dumps({{
                 _check_cancelled(video_id)
                 if video_id is not None:
                     _safe_state(state.set_current_stage, video_id, "align")
+                    notify_swiftbar_refresh()
                 print("[2/4] Aligning words...")
                 _run_step(f"""
 import json
@@ -295,6 +299,7 @@ Path({str(data_file)!r}).write_text(json.dumps({{
             _check_cancelled(video_id)
             if video_id is not None:
                 _safe_state(state.set_current_stage, video_id, "diarize")
+                notify_swiftbar_refresh()
             print("[3/4] Diarizing speakers...")
             max_diarize_attempts = 3
             diarize_ok = False
@@ -608,6 +613,7 @@ def process_video(video_path: str, video_id: int | None = None) -> Path:
 
         if video_id is not None:
             _safe_state(state.set_current_stage, video_id, "summary")
+            notify_swiftbar_refresh()
         print(f"[4/4] Generating summary with Claude...")
         stage_reached = "summary"
         try:
@@ -631,6 +637,7 @@ def process_video(video_path: str, video_id: int | None = None) -> Path:
                 )
             _safe_state(_clear_partial)
             _safe_state(state.complete_attempt, attempt_id, video_id, str(output_dir))
+            notify_swiftbar_refresh()
 
         print("=" * 60)
         print(f"Done! Output: {output_dir}")
@@ -645,10 +652,12 @@ def process_video(video_path: str, video_id: int | None = None) -> Path:
                     (stage_reached, attempt_id),
                 )
             _safe_state(_cancel_attempt)
+            notify_swiftbar_refresh()
         raise
     except Exception as e:
         if attempt_id is not None and video_id is not None:
             _safe_state(state.fail_attempt, attempt_id, video_id, str(e), stage_reached)
+            notify_swiftbar_refresh()
         raise
 
 

@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 from src import state
+from src.swiftbar import notify_swiftbar_refresh
 
 log = logging.getLogger("meetscribed-watcher")
 
@@ -113,6 +114,7 @@ def _wait_for_stable(path: Path, video_id: int, shutdown: threading.Event) -> bo
     """
     with state.connection() as conn:
         state.transition_state(conn, video_id, "waiting_stable")
+    notify_swiftbar_refresh()
 
     deadline = time.time() + LSOF_TIMEOUT
     closed = False
@@ -174,6 +176,7 @@ def _process_one(path_str: str, shutdown: threading.Event) -> None:
         with state.connection() as conn:
             state.transition_state(conn, video_id, "failed",
                                    extra_event_details={"reason": "stability_timeout"})
+        notify_swiftbar_refresh()
         notify("ОШИБКА: таймаут стабилизации", path.name, sound="Basso")
         return
 
@@ -185,11 +188,13 @@ def _process_one(path_str: str, shutdown: threading.Event) -> None:
         with state.connection() as conn:
             state.transition_state(conn, video_id, "invalid",
                                    extra_event_details={"reason": reason})
+        notify_swiftbar_refresh()
         notify("Пропущен битый/короткий файл", path.name, sound="Basso")
         return
 
     with state.connection() as conn:
         state.transition_state(conn, video_id, "queued")
+    notify_swiftbar_refresh()
 
     notify(f"В очередь: {path.name}", "", sound="default")
 

@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 from src import state
+from src.swiftbar import notify_swiftbar_refresh
 
 log = logging.getLogger("meetscribed-worker")
 
@@ -48,6 +49,8 @@ def _recover_orphans() -> None:
                 conn, row["id"], "queued",
                 extra_event_details={"reason": "orphan_from_prev_run"},
             )
+    if rows:
+        notify_swiftbar_refresh()
 
 
 def _pick_next(shutdown: threading.Event) -> dict | None:
@@ -71,6 +74,7 @@ def _process_video(video: dict, shutdown: threading.Event) -> None:
     path = video["path"]
     video_id = video["id"]
     notify(f"Обработка {Path(path).name}", "", sound="Blow")
+    notify_swiftbar_refresh()
 
     try:
         result = subprocess.run(
@@ -86,6 +90,7 @@ def _process_video(video: dict, shutdown: threading.Event) -> None:
         notify("ОШИБКА запуска pipeline", Path(path).name, sound="Basso")
         return
 
+    notify_swiftbar_refresh()
     if result.returncode == 0:
         notify(f"Готово: {Path(path).name}", "", sound="Glass")
     else:

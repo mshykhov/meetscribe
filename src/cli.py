@@ -12,6 +12,7 @@ import typer
 
 from src import state
 from src.state import runner
+from src.swiftbar import notify_swiftbar_refresh
 
 app = typer.Typer(help="meetscribe - meeting recording processor")
 
@@ -108,6 +109,7 @@ def retry(id_or_path: str) -> None:
             typer.echo(f"Video not found: {id_or_path}", err=True)
             raise typer.Exit(code=1)
         state.mark_for_retry(conn, video["id"])
+    notify_swiftbar_refresh()
     typer.echo(f"Marked for retry: {video['path']}")
 
 
@@ -121,6 +123,7 @@ def skip(id_or_path: str) -> None:
             typer.echo(f"Video not found: {id_or_path}", err=True)
             raise typer.Exit(code=1)
         state.mark_skipped(conn, video["id"], reason="user request")
+    notify_swiftbar_refresh()
     typer.echo(f"Skipped: {video['path']}")
 
 
@@ -141,7 +144,17 @@ def reprocess(id_or_path: str) -> None:
                 out.rename(archived)
                 typer.echo(f"Archived old output: {archived}")
         state.mark_for_retry(conn, video["id"])
+    notify_swiftbar_refresh()
     typer.echo(f"Reset for reprocessing: {video['path']}")
+
+
+@app.command()
+def swiftbar() -> None:
+    """Render SwiftBar plugin output to stdout."""
+    from src.swiftbar import render
+    with state.connection() as conn:
+        runner.apply_migrations(conn)
+    typer.echo(render(), nl=False)
 
 
 @app.command()
@@ -162,6 +175,7 @@ def cancel(id_or_path: str) -> None:
             raise typer.Exit(code=1)
         state.transition_state(conn, video["id"], "cancelled",
                                extra_event_details={"by": "user"})
+    notify_swiftbar_refresh()
     typer.echo(f"Cancelled: {video['path']}")
     typer.echo("Worker will exit current stage and stop processing.")
 
