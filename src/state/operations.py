@@ -166,6 +166,35 @@ def mark_skipped(conn: sqlite3.Connection, video_id: int, reason: str | None = N
     transition_state(conn, video_id, "skipped", extra_event_details=extras)
 
 
+def set_rate_limit(
+    conn: sqlite3.Connection,
+    backend: str,
+    until_ts: int,
+    reason: str = "",
+) -> None:
+    """INSERT OR REPLACE rate_limits row. Sets backend-wide pause until until_ts."""
+    conn.execute(
+        "INSERT OR REPLACE INTO rate_limits (backend, until_ts, reason) VALUES (?, ?, ?)",
+        (backend, until_ts, reason),
+    )
+    conn.execute(
+        "INSERT INTO events (video_id, ts, event_type, details) VALUES (NULL, ?, 'rate_limited', ?)",
+        (_now(), json.dumps({"backend": backend, "until_ts": until_ts, "reason": reason})),
+    )
+
+
+def set_video_next_attempt(
+    conn: sqlite3.Connection,
+    video_id: int,
+    next_attempt_after: int,
+) -> None:
+    """UPDATE videos.next_attempt_after for delayed retry."""
+    conn.execute(
+        "UPDATE videos SET next_attempt_after=?, updated_at=strftime('%s','now') WHERE id=?",
+        (next_attempt_after, video_id),
+    )
+
+
 def mark_for_retry(conn: sqlite3.Connection, video_id: int) -> None:
     """Reset state to 'detected' so daemon picks up. Clears terminal fields."""
     now = _now()

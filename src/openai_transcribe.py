@@ -4,12 +4,64 @@ Replaces local whisperx-mlx transcribe + align steps with a single API call
 that returns word-level timestamps directly.
 """
 
+import os
 import subprocess
 import tempfile
 import time
+from datetime import datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
-from openai import OpenAI, APIConnectionError, APITimeoutError
+from openai import OpenAI, APIConnectionError, APITimeoutError, RateLimitError
+
+
+class RateLimitedError(Exception):
+    """Raised when API returns 429. Carries backend name and retry_after seconds."""
+
+    def __init__(self, backend: str, retry_after_seconds: int, reason: str = ""):
+        self.backend = backend
+        self.retry_after_seconds = retry_after_seconds
+        self.reason = reason
+        super().__init__(
+            f"Rate limited on {backend}: retry after {retry_after_seconds}s ({reason})"
+        )
+
+
+DEFAULT_RETRY_AFTER_SEC = 300
+
+
+def _detect_backend(base_url: str | None) -> str:
+    """Return 'groq' or 'openai' based on base URL."""
+    if base_url and "groq" in base_url.lower():
+        return "groq"
+    return "openai"
+
+
+def _parse_retry_after(value: str | None) -> int:
+    """Parse Retry-After header. Returns seconds.
+
+    Header may be:
+    - integer seconds: '30'
+    - HTTP date: 'Wed, 01 May 2026 12:00:00 GMT'
+    """
+    if not value:
+        return DEFAULT_RETRY_AFTER_SEC
+    value = value.strip()
+    try:
+        return max(1, int(value))
+    except ValueError:
+        pass
+    try:
+        dt = parsedate_to_datetime(value)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=None)
+            now = datetime.now()
+        else:
+            now = datetime.now(dt.tzinfo)
+        delta = (dt - now).total_seconds()
+        return max(1, int(delta))
+    except (TypeError, ValueError):
+        return DEFAULT_RETRY_AFTER_SEC
 
 
 def extract_audio_to_opus(video_path: Path, output_path: Path) -> Path:
@@ -96,12 +148,16 @@ def transcribe_via_openai(
     model: str,
     language: str | None,
 ) -> dict:
-    """Transcribe video via OpenAI Whisper API. Returns whisperx-shaped dict."""
+    """Transcribe video via OpenAI Whisper API. Returns whisperx-shaped dict.
+
+    Raises RateLimitedError on 429 with parsed Retry-After (no internal retry on 429).
+    """
     if not api_key:
         raise ValueError("OPENAI_API_KEY is required when TRANSCRIBE_BACKEND=openai")
 
+    backend = _detect_backend(os.environ.get("OPENAI_BASE_URL"))
+
     with tempfile.TemporaryDirectory(prefix="meetscribe-openai-") as tmp:
-        # OpenAI rejects .opus extension; use .ogg (Opus-in-Ogg container) which is in their accepted list.
         audio_path = extract_audio_to_opus(video_path, Path(tmp) / "audio.ogg")
         validate_audio_size(audio_path)
 
@@ -121,6 +177,15 @@ def transcribe_via_openai(
                 with audio_path.open("rb") as f:
                     response = client.audio.transcriptions.create(file=f, **kwargs)
                 return map_openai_to_whisperx(response.model_dump())
+            except RateLimitError as e:
+                # 429: don't retry internally - propagate so worker can defer.
+                retry_after_header = None
+                resp = getattr(e, "response", None)
+                if resp is not None:
+                    headers = getattr(resp, "headers", None) or {}
+                    retry_after_header = headers.get("retry-after") or headers.get("Retry-After")
+                retry_after = _parse_retry_after(retry_after_header)
+                raise RateLimitedError(backend, retry_after, str(e)[:200]) from e
             except (ConnectionError, TimeoutError, APIConnectionError, APITimeoutError) as e:
                 last_err = e
                 if attempt < MAX_RETRIES:

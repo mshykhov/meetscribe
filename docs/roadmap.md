@@ -99,7 +99,14 @@ Wrap `process.py` в Python daemon. launchd plist `com.myron.meetscribe.worker` 
 - Кнопки в dropdown работают.
 - Rate-limit info displayed when active.
 
-### Phase 3e: notifications + sidecar configs + TUI (pending)
+### Phase 3e: notifications + sidecar configs + TUI (split into sub-phases)
+
+Phase 3e split into 4 independent sub-phases (per Phase 3e brainstorm 2026-05-01):
+
+- **Phase 3e-1**: Rate-limit handling (done)
+- **Phase 3e-2**: Notification action buttons (pending)
+- **Phase 3e-3**: Sidecar `.meetscribe.toml` configs (pending)
+- **Phase 3e-4**: TUI `meetscribe config` (pending)
 
 Notifications (mechanism TBD: alerter / Swift helper / UNUserNotificationCenter / read-only). Sidecar `.meetscribe.toml` per-video для backend overrides. TUI `meetscribe config` для validated `.env` editing. Полное rate-limit handling (parse Retry-After, write to `rate_limits` table, notify, auto-resume).
 
@@ -138,7 +145,10 @@ Variant A из [ADR-0003](adr/0003-openai-backend-base-url-for-groq-compat.md): 
 | Phase 3b: watcher daemon | done | (direct merge) | Python daemon replaces shell handler; CLI retry/skip/reprocess/daemon; ADRs 0017-0018 |
 | Phase 3c: worker on-demand | done | (direct merge) | Worker daemon launchctl-on-demand; partial_data crash recovery; cancel CLI; ADRs 0019-0020 |
 | Phase 3d: SwiftBar push | done | (direct merge) | Plugin reads state.db; URL-scheme refresh; meetscribe swiftbar CLI; ADR-0021 |
-| Phase 3e: notifications + sidecar + TUI | pending | | |
+| Phase 3e-1: rate-limit handling | done | (direct merge) | 429 detection + Retry-After parsing + state.db rate_limits; ADR-0022 |
+| Phase 3e-2: notification actions | pending | | |
+| Phase 3e-3: sidecar configs | pending | | |
+| Phase 3e-4: TUI config editor | pending | | |
 | Phase 3f: web dashboard | pending | | optional |
 | Phase 3g: Groq | pending | | optional |
 

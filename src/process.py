@@ -655,6 +655,29 @@ def process_video(video_path: str, video_id: int | None = None) -> Path:
             notify_swiftbar_refresh()
         raise
     except Exception as e:
+        # Rate limit special-case: video stays queued, backend paused, worker auto-resumes.
+        from src.openai_transcribe import RateLimitedError as _RLE
+        if isinstance(e, _RLE):
+            until_ts = int(time.time()) + e.retry_after_seconds
+            print(f"Rate-limited on {e.backend} until {datetime.fromtimestamp(until_ts).strftime('%H:%M')}")
+            if video_id is not None:
+                def _record_rate_limit(conn):
+                    state.set_rate_limit(conn, e.backend, until_ts, e.reason)
+                    state.set_video_next_attempt(conn, video_id, until_ts)
+                    state.transition_state(conn, video_id, "queued",
+                                           extra_event_details={"reason": "rate_limited",
+                                                                "backend": e.backend,
+                                                                "until_ts": until_ts})
+                    if attempt_id is not None:
+                        conn.execute(
+                            "UPDATE attempts SET completed_at=strftime('%s','now'), exit_code=2, "
+                            "stage_reached=?, error_message=? WHERE id=?",
+                            (stage_reached, f"rate_limited:{e.backend}", attempt_id),
+                        )
+                _safe_state(_record_rate_limit)
+                notify_swiftbar_refresh()
+            raise
+        # Generic exception: mark failed
         if attempt_id is not None and video_id is not None:
             _safe_state(state.fail_attempt, attempt_id, video_id, str(e), stage_reached)
             notify_swiftbar_refresh()

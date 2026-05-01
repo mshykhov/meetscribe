@@ -19,6 +19,8 @@ from src.state.operations import (
     record_event,
     mark_skipped,
     mark_for_retry,
+    set_rate_limit,
+    set_video_next_attempt,
 )
 
 __all__ = [
@@ -40,4 +42,6 @@ __all__ = [
     "record_event",
     "mark_skipped",
     "mark_for_retry",
+    "set_rate_limit",
+    "set_video_next_attempt",
 ]

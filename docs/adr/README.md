@@ -27,6 +27,7 @@
 | [0019](0019-cancel-via-state-db-between-stages.md) | Cancel via state.db between stages | Accepted | 2026-04-30 |
 | [0020](0020-partial-data-writes-in-process-py.md) | partial_data writes in process.py | Accepted | 2026-04-30 |
 | [0021](0021-swiftbar-render-via-cli-typer-command.md) | SwiftBar render via typer CLI | Accepted | 2026-04-30 |
+| [0022](0022-rate-limit-handling.md) | Rate-limit via state.db + worker auto-resume | Accepted | 2026-05-01 |
 
 ## Как добавить новую ADR
 
