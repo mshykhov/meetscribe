@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 
 from src import state
 from src.notify import notify_event
+from src.sidecar import SidecarError, load_sidecar
 from src.state import runner as _state_runner
 from src.swiftbar import notify_swiftbar_refresh
 
@@ -576,6 +577,18 @@ def organize_files(
 
 def process_video(video_path: str, video_id: int | None = None) -> Path:
     cfg = load_config()
+    try:
+        cfg.update(load_sidecar(Path(video_path)))
+    except SidecarError as e:
+        if video_id is not None:
+            with state.connection() as conn:
+                state.transition_state(
+                    conn, video_id, "invalid",
+                    extra_event_details={"reason": str(e)},
+                )
+            notify_swiftbar_refresh()
+        notify_event("invalid", video_id=video_id, video_path=Path(video_path))
+        raise
     date_str = get_recording_date(video_path)
 
     print(f"Processing: {video_path}")

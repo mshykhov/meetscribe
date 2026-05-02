@@ -105,13 +105,12 @@ Phase 3e split into 4 independent sub-phases (per Phase 3e brainstorm 2026-05-01
 
 - **Phase 3e-1**: Rate-limit handling (done)
 - **Phase 3e-2**: Smarter notifications + click-to-open (done)
-- **Phase 3e-3**: Sidecar `.meetscribe.toml` configs (pending)
+- **Phase 3e-3**: Sidecar `.meetscribe.toml` per-video overrides (done)
 - **Phase 3e-4**: TUI `meetscribe config` (pending)
 
-Sidecar `.meetscribe.toml` per-video для backend overrides. TUI `meetscribe config` для validated `.env` editing.
+TUI `meetscribe config` для validated `.env` editing.
 
 **Success criteria:**
-- Per-video sidecar overrides работают end-to-end.
 - `meetscribe config` validates inputs.
 
 #### Phase 3e-2: Smarter notifications + click-to-open (done)
@@ -122,6 +121,15 @@ Sidecar `.meetscribe.toml` per-video для backend overrides. TUI `meetscribe c
 targets через `terminal-notifier -open file://...`. Дублирующая `notify()` удалена
 из watcher и worker. `MEETSCRIBE_DISABLE_NOTIFICATIONS=1` kill-switch.
 ADR пока не пишется (нет архитектурного решения - просто рефактор).
+
+#### Phase 3e-3: Sidecar `.meetscribe.toml` (done)
+
+`src/sidecar.py` reads `<stem>.meetscribe.toml` next to a video and
+returns a dict of overrides merged on top of `load_config()`. Six allowed
+keys (transcribe_backend, language, whisper_model, openai_transcribe_model,
+max_speakers, claude_model). Forbidden: secrets and system paths. Any
+schema violation marks video `state='invalid'`. User docs in
+`docs/sidecar.md`.
 
 ### Phase 3f: optional web dashboard (pending)
 
@@ -140,6 +148,19 @@ Variant A из [ADR-0003](adr/0003-openai-backend-base-url-for-groq-compat.md): 
 - `TRANSCRIBE_BACKEND=openai` + `OPENAI_BASE_URL=https://api.groq.com/openai/v1` работает.
 - 429 hit виден end-to-end (verified с throttled key).
 
+### Phase 3h: summary backend pluralism (pending, future)
+
+Replace single `claude_model` knob with `summary_backend` enum
+(`claude_code` | `openai_compat` | `anthropic_api`) + `summary_model`.
+Mirrors the transcribe pattern: `OPENAI_BASE_URL` covers OpenAI/Groq via
+the same backend label. `claude_model` becomes a legacy alias mapping to
+`summary_model` when `summary_backend=claude_code`.
+
+**Success criteria:**
+- `SUMMARY_BACKEND=openai_compat` + `OPENAI_BASE_URL=...` produces summary via Groq.
+- Sidecar accepts `summary_backend` / `summary_model` keys.
+- 429 from summary backend handled like transcribe (next_attempt_after, auto-resume).
+
 ## Status board
 
 Обновлять при merge каждой phase.
@@ -153,8 +174,8 @@ Variant A из [ADR-0003](adr/0003-openai-backend-base-url-for-groq-compat.md): 
 | Phase 3c: worker on-demand | done | (direct merge) | Worker daemon launchctl-on-demand; partial_data crash recovery; cancel CLI; ADRs 0019-0020 |
 | Phase 3d: SwiftBar push | done | (direct merge) | Plugin reads state.db; URL-scheme refresh; meetscribe swiftbar CLI; ADR-0021 |
 | Phase 3e-1: rate-limit handling | done | (direct merge) | 429 detection + Retry-After parsing + state.db rate_limits; ADR-0022 |
-| Phase 3e-2: notification actions | pending | | |
-| Phase 3e-3: sidecar configs | pending | | |
+| Phase 3e-2: notification actions | done | (direct merge) | src/notify.py facade; rules table; click-to-open via -open URL |
+| Phase 3e-3: sidecar configs | done | (direct merge) | src/sidecar.py; 6 allowed keys; fail-fast validation; docs/sidecar.md |
 | Phase 3e-4: TUI config editor | pending | | |
 | Phase 3f: web dashboard | pending | | optional |
 | Phase 3g: Groq | pending | | optional |
