@@ -61,7 +61,8 @@ def test_process_video_writes_done_state_on_success(db_setup, output_dir, tmp_pa
         return "### Короткое название\nfake summary\n\n### Тема\ntest"
 
     monkeypatch.setattr(process, "transcribe", fake_transcribe)
-    monkeypatch.setattr(process, "call_claude", fake_call_claude)
+    from src import summarize
+    monkeypatch.setattr(summarize, "call_summary_provider", fake_call_claude)
 
     process.process_video(str(video_path))
 
@@ -133,6 +134,7 @@ def test_state_write_failure_does_not_abort_pipeline(db_setup, output_dir, tmp_p
         return "### Короткое название\nfake\n\n### Тема\ntest"
 
     monkeypatch.setattr(process, "transcribe", fake_transcribe)
-    monkeypatch.setattr(process, "call_claude", fake_call_claude)
+    from src import summarize
+    monkeypatch.setattr(summarize, "call_summary_provider", fake_call_claude)
 
     process.process_video(str(video_path))

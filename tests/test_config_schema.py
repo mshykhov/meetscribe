@@ -21,7 +21,65 @@ def _base_env(tmp_path: Path) -> dict[str, str]:
         "LANGUAGE": "",
         "MAX_SPEAKERS": "0",
         "CLAUDE_MODEL": "claude-sonnet-4-6",
+        "SUMMARY_BACKEND": "claude_code",
+        "OPENAI_SUMMARY_MODEL": "gpt-4o-mini",
+        "GROQ_SUMMARY_MODEL": "llama-3.3-70b-versatile",
     }
+
+
+def test_env_summary_backend_claude_code_ok(tmp_path):
+    """summary_backend='claude_code' is the default and valid."""
+    from src.config_schema import validate_env
+    env = _base_env(tmp_path)
+    env["SUMMARY_BACKEND"] = "claude_code"
+    assert validate_env(env) == []
+
+
+def test_env_summary_backend_openai_requires_api_key(tmp_path):
+    from src.config_schema import validate_env
+    env = _base_env(tmp_path)
+    env["SUMMARY_BACKEND"] = "openai"
+    env["OPENAI_API_KEY"] = ""
+    errors = validate_env(env)
+    assert any(e.key == "OPENAI_API_KEY" for e in errors)
+
+
+def test_env_summary_backend_groq_requires_api_key(tmp_path):
+    from src.config_schema import validate_env
+    env = _base_env(tmp_path)
+    env["SUMMARY_BACKEND"] = "groq"
+    env["GROQ_API_KEY"] = ""
+    errors = validate_env(env)
+    assert any(e.key == "GROQ_API_KEY" for e in errors)
+
+
+def test_env_summary_backend_groq_with_api_key_ok(tmp_path):
+    from src.config_schema import validate_env
+    env = _base_env(tmp_path)
+    env["SUMMARY_BACKEND"] = "groq"
+    env["GROQ_API_KEY"] = "gsk-abc"
+    assert validate_env(env) == []
+
+
+def test_env_summary_backend_invalid_value(tmp_path):
+    from src.config_schema import validate_env
+    env = _base_env(tmp_path)
+    env["SUMMARY_BACKEND"] = "azure"
+    errors = validate_env(env)
+    assert any(e.key == "SUMMARY_BACKEND" for e in errors)
+
+
+def test_env_shared_provider_key_message_format(tmp_path):
+    """Cross-key error message says 'using openai provider' not stage-specific."""
+    from src.config_schema import validate_env
+    env = _base_env(tmp_path)
+    env["TRANSCRIBE_BACKEND"] = "local"
+    env["SUMMARY_BACKEND"] = "openai"
+    env["OPENAI_API_KEY"] = ""
+    errors = validate_env(env)
+    msgs = [e.message for e in errors if e.key == "OPENAI_API_KEY"]
+    assert len(msgs) == 1
+    assert "openai provider" in msgs[0]
 
 
 def test_env_minimal_valid(tmp_path):

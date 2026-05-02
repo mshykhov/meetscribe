@@ -22,6 +22,9 @@ def env_file(tmp_path):
         "LANGUAGE=\n"
         "MAX_SPEAKERS=0\n"
         "CLAUDE_MODEL=claude-sonnet-4-6\n"
+        "SUMMARY_BACKEND=claude_code\n"
+        "OPENAI_SUMMARY_MODEL=gpt-4o-mini\n"
+        "GROQ_SUMMARY_MODEL=llama-3.3-70b-versatile\n"
     )
     return p
 

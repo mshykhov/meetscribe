@@ -228,3 +228,38 @@ def test_forbidden_key_groq_api_key(tmp_path):
         load_sidecar(video)
     assert "forbidden" in str(excinfo.value)
     assert "groq_api_key" in str(excinfo.value)
+
+
+def test_sidecar_allows_summary_backend(tmp_path):
+    from src.sidecar import load_sidecar
+    video = tmp_path / "v.mp4"
+    sidecar = tmp_path / "v.meetscribe.toml"
+    sidecar.write_text('summary_backend = "groq"\n')
+    assert load_sidecar(video) == {"summary_backend": "groq"}
+
+
+def test_sidecar_allows_openai_summary_model(tmp_path):
+    from src.sidecar import load_sidecar
+    video = tmp_path / "v.mp4"
+    sidecar = tmp_path / "v.meetscribe.toml"
+    sidecar.write_text('openai_summary_model = "gpt-4o"\n')
+    assert load_sidecar(video) == {"openai_summary_model": "gpt-4o"}
+
+
+def test_sidecar_allows_groq_summary_model(tmp_path):
+    from src.sidecar import load_sidecar
+    video = tmp_path / "v.mp4"
+    sidecar = tmp_path / "v.meetscribe.toml"
+    sidecar.write_text('groq_summary_model = "llama-3.3-70b-versatile"\n')
+    assert load_sidecar(video) == {"groq_summary_model": "llama-3.3-70b-versatile"}
+
+
+def test_sidecar_rejects_invalid_summary_backend(tmp_path):
+    from src.sidecar import load_sidecar, SidecarError
+    video = tmp_path / "v.mp4"
+    sidecar = tmp_path / "v.meetscribe.toml"
+    sidecar.write_text('summary_backend = "azure"\n')
+    with pytest.raises(SidecarError) as excinfo:
+        load_sidecar(video)
+    assert "summary_backend" in str(excinfo.value)
+    assert "must be one of" in str(excinfo.value)

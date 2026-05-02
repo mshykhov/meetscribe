@@ -106,7 +106,6 @@ SUMMARY_PROMPT = """Ты - ассистент для анализа записе
 
 """
 
-MAX_TRANSCRIPT_CHARS = 600_000
 MAX_VIDEO_DURATION_SEC = 4 * 3600  # 4 hours hard limit
 WHISPERX_TIMEOUT_SEC = 3600  # 1 hour max for transcription
 
@@ -134,6 +133,9 @@ def load_config() -> dict:
         "openai_transcribe_model": os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1"),
         "groq_api_key": os.environ.get("GROQ_API_KEY", ""),
         "groq_transcribe_model": os.environ.get("GROQ_TRANSCRIBE_MODEL", "whisper-large-v3"),
+        "summary_backend": os.environ.get("SUMMARY_BACKEND", "claude_code"),
+        "openai_summary_model": os.environ.get("OPENAI_SUMMARY_MODEL", "gpt-4o-mini"),
+        "groq_summary_model": os.environ.get("GROQ_SUMMARY_MODEL", "llama-3.3-70b-versatile"),
     }
 
 
@@ -392,16 +394,6 @@ def build_transcript(result: dict) -> str:
     return "\n".join(lines)
 
 
-def call_claude(prompt: str, cfg: dict, timeout: int = 600) -> str:
-    result = subprocess.run(
-        [cfg["claude_cli"], "-p", "-", "--model", cfg["claude_model"]],
-        input=prompt, capture_output=True, text=True, timeout=timeout,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"Claude CLI failed: {result.stderr}")
-    return result.stdout.strip()
-
-
 def _safe_state(callable_, *args, **kwargs):
     """Run a state.db write callable, swallowing exceptions.
 
@@ -469,8 +461,11 @@ def _load_partial(video_id: int | None) -> tuple[dict | None, str | None]:
 
 
 def generate_summary(transcript: str, cfg: dict) -> str:
-    if len(transcript) <= MAX_TRANSCRIPT_CHARS:
-        return call_claude(SUMMARY_PROMPT + transcript, cfg)
+    from src.summarize import call_summary_provider, max_transcript_chars
+
+    threshold = max_transcript_chars(cfg)
+    if len(transcript) <= threshold:
+        return call_summary_provider(SUMMARY_PROMPT + transcript, cfg)
 
     print(f"Transcript too long ({len(transcript)} chars), splitting into chunks...")
     lines = transcript.split("\n")
@@ -479,7 +474,7 @@ def generate_summary(transcript: str, cfg: dict) -> str:
     current_len = 0
 
     for line in lines:
-        if current_len + len(line) > MAX_TRANSCRIPT_CHARS and current_chunk:
+        if current_len + len(line) > threshold and current_chunk:
             chunks.append("\n".join(current_chunk))
             current_chunk = []
             current_len = 0
@@ -498,7 +493,7 @@ def generate_summary(transcript: str, cfg: dict) -> str:
             f"Выдели ключевые решения, action items для Myron, важные моменты.\n\n"
             f"Транскрипция (часть {i + 1}):\n\n{chunk}"
         )
-        partial = call_claude(chunk_prompt, cfg)
+        partial = call_summary_provider(chunk_prompt, cfg)
         partial_summaries.append(partial)
 
     print("  Merging chunk summaries into final...")
@@ -509,7 +504,7 @@ def generate_summary(transcript: str, cfg: dict) -> str:
             f"=== Часть {i + 1} ===\n{s}" for i, s in enumerate(partial_summaries)
         )
     )
-    return call_claude(merge_prompt, cfg)
+    return call_summary_provider(merge_prompt, cfg)
 
 
 def extract_topic(summary: str) -> str:
@@ -633,7 +628,7 @@ def process_video(video_path: str, video_id: int | None = None) -> Path:
         if video_id is not None:
             _safe_state(state.set_current_stage, video_id, "summary")
             notify_swiftbar_refresh()
-        print(f"[4/4] Generating summary with Claude...")
+        print(f"[4/4] Generating summary via {cfg['summary_backend']}...")
         stage_reached = "summary"
         try:
             summary = generate_summary(transcript, cfg)

@@ -135,7 +135,8 @@ class TestProcessVideoClearsPartial:
             return "### Короткое название\nfake\n\n### Тема\ntest"
 
         monkeypatch.setattr(process, "transcribe", fake_transcribe)
-        monkeypatch.setattr(process, "call_claude", fake_call_claude)
+        from src import summarize
+        monkeypatch.setattr(summarize, "call_summary_provider", fake_call_claude)
 
         process.process_video(str(video_path), video_id=vid)
 

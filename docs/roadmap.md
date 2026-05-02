@@ -152,18 +152,9 @@ Per [ADR-0023](adr/0023-first-class-transcribe-providers.md): `TRANSCRIBE_BACKEN
 
 **Migration note:** anyone with `OPENAI_BASE_URL=https://api.groq.com/...` в `.env` thinking they used Groq - они на самом деле обрабатывали через api.openai.com (был bug). Чтобы реально использовать Groq: `TRANSCRIBE_BACKEND=groq` + `GROQ_API_KEY=gsk-...` + `GROQ_TRANSCRIBE_MODEL=whisper-large-v3`. `OPENAI_BASE_URL` строка в существующем `.env` тихо игнорируется (passes through `config_io` as unknown KV).
 
-### Phase 3h: summary backend pluralism (pending, future)
+### Phase 3h: First-class summary providers (done)
 
-Replace single `claude_model` knob with `summary_backend` enum
-(`claude_code` | `openai_compat` | `anthropic_api`) + `summary_model`.
-Mirrors the transcribe pattern: `OPENAI_BASE_URL` covers OpenAI/Groq via
-the same backend label. `claude_model` becomes a legacy alias mapping to
-`summary_model` when `summary_backend=claude_code`.
-
-**Success criteria:**
-- `SUMMARY_BACKEND=openai_compat` + `OPENAI_BASE_URL=...` produces summary via Groq.
-- Sidecar accepts `summary_backend` / `summary_model` keys.
-- 429 from summary backend handled like transcribe (next_attempt_after, auto-resume).
+Per [ADR-0024](adr/0024-first-class-summary-providers.md): `SUMMARY_BACKEND` enum (`claude_code` | `openai` | `groq`). New `src/summarize.py` dispatches by backend (subprocess for Claude Code CLI, OpenAI SDK Chat Completions for openai/groq). Per-backend `max_transcript_chars` (claude=600k, openai/groq=300k) - Russian transcripts switching to Groq стали корректно chunkать. Cross-key validation refactored into shared `_check_provider_keys` helper considering both `TRANSCRIBE_BACKEND` и `SUMMARY_BACKEND`. Default `SUMMARY_BACKEND=claude_code` - existing users без изменений.
 
 ## Status board
 
@@ -183,6 +174,7 @@ the same backend label. `claude_model` becomes a legacy alias mapping to
 | Phase 3e-4: TUI config editor | done | (direct merge) | Textual form; src/config_schema shared with sidecar; meetscribe config + verify |
 | Phase 3f: web dashboard | pending | | optional |
 | Phase 3g: first-class transcribe providers | done | (direct merge) | ADR-0023 supersedes 0003; _PROVIDERS dispatch; OPENAI_BASE_URL retired |
+| Phase 3h: first-class summary providers | done | (direct merge) | ADR-0024; src/summarize.py dispatch; per-backend chunking threshold |
 
 ## Open questions deferred to phase specs
 

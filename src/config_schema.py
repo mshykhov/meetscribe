@@ -11,6 +11,8 @@ _ALLOWED_TYPES: dict[str, type] = {
     "hf_token": str, "openai_api_key": str, "claude_cli": str,
     "watch_dir": str, "output_dir": str,
     "groq_api_key": str, "groq_transcribe_model": str,
+    "summary_backend": str,
+    "openai_summary_model": str, "groq_summary_model": str,
 }
 
 ENV_KEYS: tuple[str, ...] = (
@@ -19,12 +21,16 @@ ENV_KEYS: tuple[str, ...] = (
     "TRANSCRIBE_BACKEND", "WHISPER_MODEL",
     "OPENAI_TRANSCRIBE_MODEL", "GROQ_TRANSCRIBE_MODEL",
     "LANGUAGE", "MAX_SPEAKERS", "CLAUDE_MODEL",
+    "SUMMARY_BACKEND",
+    "OPENAI_SUMMARY_MODEL", "GROQ_SUMMARY_MODEL",
 )
 
 SIDECAR_KEYS: frozenset[str] = frozenset({
     "transcribe_backend", "language", "whisper_model",
     "openai_transcribe_model", "groq_transcribe_model",
     "max_speakers", "claude_model",
+    "summary_backend",
+    "openai_summary_model", "groq_summary_model",
 })
 
 SIDECAR_FORBIDDEN: frozenset[str] = frozenset({
@@ -37,6 +43,7 @@ _ENUMS: dict[str, frozenset[str]] = {
     "whisper_model": frozenset({
         "tiny", "base", "small", "medium", "large-v2", "large-v3",
     }),
+    "summary_backend": frozenset({"claude_code", "openai", "groq"}),
 }
 
 
@@ -107,7 +114,9 @@ def validate_env(data: dict[str, str]) -> list[ConfigError]:
         if KEY in {"HF_TOKEN", "CLAUDE_CLI", "WATCH_DIR", "OUTPUT_DIR",
                    "TRANSCRIBE_BACKEND", "WHISPER_MODEL",
                    "OPENAI_TRANSCRIBE_MODEL", "GROQ_TRANSCRIBE_MODEL",
-                   "MAX_SPEAKERS", "CLAUDE_MODEL"}:
+                   "MAX_SPEAKERS", "CLAUDE_MODEL",
+                   "SUMMARY_BACKEND",
+                   "OPENAI_SUMMARY_MODEL", "GROQ_SUMMARY_MODEL"}:
             if raw == "":
                 errors.append(ConfigError(KEY, f"{KEY}: required"))
                 continue
@@ -147,18 +156,20 @@ def validate_env(data: dict[str, str]) -> list[ConfigError]:
                 ConfigError(KEY, f"{KEY}: parent directory '{p.parent}' does not exist"),
             )
 
-    # Cross-key: openai backend requires api key.
-    if data.get("TRANSCRIBE_BACKEND") == "openai" and not data.get("OPENAI_API_KEY"):
-        errors.append(
-            ConfigError("OPENAI_API_KEY",
-                        "OPENAI_API_KEY: required when TRANSCRIBE_BACKEND=openai"),
-        )
-
-    # Cross-key: groq backend requires api key.
-    if data.get("TRANSCRIBE_BACKEND") == "groq" and not data.get("GROQ_API_KEY"):
-        errors.append(
-            ConfigError("GROQ_API_KEY",
-                        "GROQ_API_KEY: required when TRANSCRIBE_BACKEND=groq"),
-        )
+    # Cross-key: provider key required if any stage uses that provider.
+    backends_in_use = {
+        data.get("TRANSCRIBE_BACKEND"),
+        data.get("SUMMARY_BACKEND"),
+    }
+    provider_key_map = {
+        "openai": "OPENAI_API_KEY",
+        "groq": "GROQ_API_KEY",
+    }
+    for provider, env_key in provider_key_map.items():
+        if provider in backends_in_use and not data.get(env_key):
+            errors.append(ConfigError(
+                env_key,
+                f"{env_key}: required when using {provider} provider",
+            ))
 
     return errors

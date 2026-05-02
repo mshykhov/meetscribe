@@ -20,7 +20,9 @@ _TAB_LAYOUT: list[tuple[str, list[str]]] = [
     ("Transcribe", ["TRANSCRIBE_BACKEND", "WHISPER_MODEL",
                     "OPENAI_TRANSCRIBE_MODEL", "GROQ_TRANSCRIBE_MODEL",
                     "LANGUAGE"]),
-    ("Pipeline", ["MAX_SPEAKERS", "CLAUDE_MODEL"]),
+    ("Pipeline", ["SUMMARY_BACKEND", "CLAUDE_MODEL",
+                  "OPENAI_SUMMARY_MODEL", "GROQ_SUMMARY_MODEL",
+                  "MAX_SPEAKERS"]),
 ]
 
 
@@ -29,6 +31,8 @@ def _enum_for(key: str) -> tuple[str, ...] | None:
         return tuple(sorted(_ENUMS["transcribe_backend"]))
     if key == "WHISPER_MODEL":
         return tuple(sorted(_ENUMS["whisper_model"]))
+    if key == "SUMMARY_BACKEND":
+        return tuple(sorted(_ENUMS["summary_backend"]))
     return None
 
 
