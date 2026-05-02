@@ -230,5 +230,37 @@ def daemon_stop() -> None:
     typer.echo("Stopped.")
 
 
+config_app = typer.Typer(help="Edit and validate .env config")
+app.add_typer(config_app, name="config")
+
+
+@config_app.callback(invoke_without_command=True)
+def config_default(ctx: typer.Context) -> None:
+    """Open Textual TUI when called without a sub-command."""
+    if ctx.invoked_subcommand is not None:
+        return
+    from src.config_tui import run_config_tui
+
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    raise typer.Exit(run_config_tui(env_path))
+
+
+@config_app.command("verify")
+def config_verify() -> None:
+    """Validate current .env. Exits 0 on success, 1 on any error."""
+    from src.config_io import read_env
+    from src.config_schema import validate_env
+
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    values = read_env(env_path)
+    errors = validate_env(values)
+    if not errors:
+        print("OK")
+        raise typer.Exit(0)
+    for err in errors:
+        print(f"ERROR {err.message}")
+    raise typer.Exit(1)
+
+
 if __name__ == "__main__":
     app()

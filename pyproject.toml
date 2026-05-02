@@ -9,6 +9,7 @@ dependencies = [
     "openai>=1.0",
     "typer>=0.12",
     "watchdog>=4.0",
+    "textual>=0.50",
 ]
 
 [project.scripts]
@@ -18,3 +19,6 @@ meetscribe = "src.cli:app"
 where = ["."]
 include = ["src*"]
 namespaces = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

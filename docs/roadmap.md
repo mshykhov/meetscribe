@@ -106,9 +106,7 @@ Phase 3e split into 4 independent sub-phases (per Phase 3e brainstorm 2026-05-01
 - **Phase 3e-1**: Rate-limit handling (done)
 - **Phase 3e-2**: Smarter notifications + click-to-open (done)
 - **Phase 3e-3**: Sidecar `.meetscribe.toml` per-video overrides (done)
-- **Phase 3e-4**: TUI `meetscribe config` (pending)
-
-TUI `meetscribe config` для validated `.env` editing.
+- **Phase 3e-4**: TUI `meetscribe config` for `.env` editing (done)
 
 **Success criteria:**
 - `meetscribe config` validates inputs.
@@ -130,6 +128,14 @@ keys (transcribe_backend, language, whisper_model, openai_transcribe_model,
 max_speakers, claude_model). Forbidden: secrets and system paths. Any
 schema violation marks video `state='invalid'`. User docs in
 `docs/sidecar.md`.
+
+#### Phase 3e-4: TUI for `.env` (done)
+
+`meetscribe config` opens a Textual form (4 tabs, 11 keys) with shared
+validation via `src/config_schema.py`. `meetscribe config verify` is
+non-interactive validation suitable for pre-flight scripts. Sidecar
+validation refactored to delegate to `config_schema` - no behaviour
+change, 21 sidecar tests untouched. New deps: textual, pytest-asyncio.
 
 ### Phase 3f: optional web dashboard (pending)
 
@@ -176,7 +182,7 @@ the same backend label. `claude_model` becomes a legacy alias mapping to
 | Phase 3e-1: rate-limit handling | done | (direct merge) | 429 detection + Retry-After parsing + state.db rate_limits; ADR-0022 |
 | Phase 3e-2: notification actions | done | (direct merge) | src/notify.py facade; rules table; click-to-open via -open URL |
 | Phase 3e-3: sidecar configs | done | (direct merge) | src/sidecar.py; 6 allowed keys; fail-fast validation; docs/sidecar.md |
-| Phase 3e-4: TUI config editor | pending | | |
+| Phase 3e-4: TUI config editor | done | (direct merge) | Textual form; src/config_schema shared with sidecar; meetscribe config + verify |
 | Phase 3f: web dashboard | pending | | optional |
 | Phase 3g: Groq | pending | | optional |
 
