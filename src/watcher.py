@@ -248,8 +248,8 @@ def _resolve_watch_dir() -> Path:
 def main() -> None:
     """Daemon entry point."""
     from dotenv import load_dotenv
-    project_root = Path(__file__).parent.parent
-    load_dotenv(project_root / ".env")
+    from src.paths import env_path
+    load_dotenv(env_path())
 
     logging.basicConfig(
         level=logging.INFO,

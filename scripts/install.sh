@@ -52,9 +52,12 @@ case "${1:-install}" in
         launchctl bootout "$DOMAIN/$PLIST_WATCHER_NAME" 2>/dev/null || true
         launchctl bootout "$DOMAIN/$PLIST_WORKER_NAME" 2>/dev/null || true
 
-        # Install both plists
-        cp "$PROJECT_DIR/$PLIST_WATCHER_NAME.plist" "$HOME/Library/LaunchAgents/"
-        cp "$PROJECT_DIR/$PLIST_WORKER_NAME.plist" "$HOME/Library/LaunchAgents/"
+        # Render plists from templates (replaces former cp of static plists).
+        "$PROJECT_DIR/.venv/bin/python" "$PROJECT_DIR/scripts/render_plists.py" \
+            --install-dir "$PROJECT_DIR" \
+            --venv "$PROJECT_DIR/.venv" \
+            --output-dir "$HOME/Library/LaunchAgents/" \
+            --logs-dir "$PROJECT_DIR/.logs"
         chmod 644 "$HOME/Library/LaunchAgents/$PLIST_WATCHER_NAME.plist"
         chmod 644 "$HOME/Library/LaunchAgents/$PLIST_WORKER_NAME.plist"
         plutil -lint "$HOME/Library/LaunchAgents/$PLIST_WATCHER_NAME.plist"

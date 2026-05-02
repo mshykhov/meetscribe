@@ -151,6 +151,10 @@ Per [ADR-0023](adr/0023-first-class-transcribe-providers.md): `TRANSCRIBE_BACKEN
 
 Per [ADR-0024](adr/0024-first-class-summary-providers.md): `SUMMARY_BACKEND` enum (`claude_code` | `openai` | `groq`). New `src/summarize.py` dispatches by backend (subprocess for Claude Code CLI, OpenAI SDK Chat Completions for openai/groq). Per-backend `max_transcript_chars` (claude=600k, openai/groq=300k) - Russian transcripts switching to Groq стали корректно chunkать. Cross-key validation refactored into shared `_check_provider_keys` helper considering both `TRANSCRIBE_BACKEND` и `SUMMARY_BACKEND`. Default `SUMMARY_BACKEND=claude_code` - existing users без изменений.
 
+### Phase 3i: Standalone install / update / uninstall (done)
+
+`bootstrap.sh` (curl-pipeable) downloads the source tarball, sets up an isolated venv at `~/.local/share/meetscribe/`, bootstraps launchd (watcher + worker), and installs a `meetscribe` shim into `~/.local/bin/`. Re-running upgrades. `meetscribe self-uninstall` removes everything cleanly with a hard guard against deleting non-default `OUTPUT_DIR`. `meetscribe self-update` re-runs the bootstrap one-liner. Plists are now rendered from templates at install time (`scripts/render_plists.py`) instead of static files in the repo root. Dev mode (clone + `pip install -e .`) is preserved via XDG-aware path resolution in `src/paths.py`.
+
 ## Status board
 
 Обновлять при merge каждой phase.
@@ -170,6 +174,7 @@ Per [ADR-0024](adr/0024-first-class-summary-providers.md): `SUMMARY_BACKEND` enu
 | Phase 3f: web history dashboard | done | (direct merge) | stdlib http.server; src/web.py; meetscribe web command |
 | Phase 3g: first-class transcribe providers | done | (direct merge) | ADR-0023 supersedes 0003; _PROVIDERS dispatch; OPENAI_BASE_URL retired |
 | Phase 3h: first-class summary providers | done | (direct merge) | ADR-0024; src/summarize.py dispatch; per-backend chunking threshold |
+| Phase 3i: standalone install/update/uninstall | done | (direct merge) | bootstrap.sh; src/paths.py XDG; render_plists.py; meetscribe self-uninstall/self-update |
 
 ## Open questions deferred to phase specs
 

@@ -8,13 +8,13 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/myron/projects/meetscribe/.venv/bin/python</string>
+        <string>{venv_python}</string>
         <string>-m</string>
         <string>src.watcher</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/myron/projects/meetscribe</string>
+    <string>{install_dir}</string>
 
     <key>KeepAlive</key>
     <true/>
@@ -29,16 +29,16 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/myron/projects/meetscribe/.logs/watcher.log</string>
+    <string>{logs_dir}/watcher.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/myron/projects/meetscribe/.logs/watcher.log</string>
+    <string>{logs_dir}/watcher.log</string>
 
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
         <string>/opt/homebrew/bin:/opt/homebrew/opt/ffmpeg/bin:/usr/local/bin:/usr/bin:/bin</string>
         <key>HOME</key>
-        <string>/Users/myron</string>
+        <string>__HOME__</string>
         <key>KMP_DUPLICATE_LIB_OK</key>
         <string>TRUE</string>
         <key>PYTHONUNBUFFERED</key>

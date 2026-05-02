@@ -62,10 +62,11 @@ def _process_video(video: dict, shutdown: threading.Event) -> None:
     notify_swiftbar_refresh()
 
     try:
+        from src.paths import venv_python, install_dir
         result = subprocess.run(
-            [sys.executable, "-m", "src.process",
+            [str(venv_python()), "-m", "src.process",
              "--video-id", str(video_id), path],
-            cwd=str(PROJECT_ROOT),
+            cwd=str(install_dir()),
         )
     except Exception as e:
         log.exception("subprocess error for %s", path)
@@ -95,7 +96,8 @@ def _process_video(video: dict, shutdown: threading.Event) -> None:
 def main() -> None:
     """Daemon entry point."""
     from dotenv import load_dotenv
-    load_dotenv(PROJECT_ROOT / ".env")
+    from src.paths import env_path
+    load_dotenv(env_path())
 
     logging.basicConfig(
         level=logging.INFO,

@@ -272,5 +272,42 @@ def web(
     serve(host=host, port=port)
 
 
+@app.command("self-uninstall")
+def self_uninstall(
+    keep_data: bool = typer.Option(
+        True, "--keep-data/--no-keep-data",
+        help="Keep state.db, .env, and default OUTPUT_DIR (default: keep)",
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+) -> None:
+    """Remove meetscribe install. --no-keep-data also wipes state.db and .env."""
+    from src.lifecycle import uninstall as do_uninstall
+    if not yes:
+        typer.confirm("Remove meetscribe install?", abort=True)
+        if not keep_data:
+            typer.confirm("Also delete state.db, .env, and default OUTPUT_DIR?",
+                          abort=True)
+    do_uninstall(keep_data=keep_data)
+
+
+@app.command("self-update")
+def self_update(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+) -> None:
+    """Re-run bootstrap.sh to upgrade to the latest main."""
+    import subprocess
+    if not yes:
+        typer.confirm(
+            "Download and run bootstrap.sh from main? "
+            "(Existing services will be restarted)",
+            abort=True,
+        )
+    subprocess.run(
+        "curl -fsSL https://raw.githubusercontent.com/mshykhov/meetscribe/main/"
+        "bootstrap.sh | bash",
+        shell=True, check=True,
+    )
+
+
 if __name__ == "__main__":
     app()

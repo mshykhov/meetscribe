@@ -119,7 +119,8 @@ def _timeout_handler(signum, frame):
 
 
 def load_config() -> dict:
-    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+    from src.paths import env_path
+    load_dotenv(env_path())
     return {
         "hf_token": os.environ["HF_TOKEN"],
         "output_dir": Path(os.environ.get("OUTPUT_DIR", "~/docs/video")).expanduser(),
