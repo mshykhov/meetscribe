@@ -137,14 +137,9 @@ non-interactive validation suitable for pre-flight scripts. Sidecar
 validation refactored to delegate to `config_schema` - no behaviour
 change, 21 sidecar tests untouched. New deps: textual, pytest-asyncio.
 
-### Phase 3f: optional web dashboard (pending)
+### Phase 3f: Minimal web history dashboard (done)
 
-Local web server на `127.0.0.1:8123`. Drag-and-drop add video, live progress, history search, edit summary inline. Stack TBD (FastAPI + WebSocket / Flask + htmx / Streamlit / можно отказаться если TUI достаточно).
-
-**Success criteria:**
-- Web UI на `http://127.0.0.1:8123`.
-- All operations available (что и в CLI).
-- WebSocket pushes state changes.
+Local-only stdlib `http.server` on `127.0.0.1:8123`. Single-page UI for history search (filename substring, state, date range). No drag-drop / WebSocket / inline edit - those are covered by Finder, SwiftBar, and any text editor respectively. Started manually via `meetscribe web`; not run as a daemon. Zero new dependencies.
 
 ### Phase 3g: First-class transcribe providers (done)
 
@@ -172,7 +167,7 @@ Per [ADR-0024](adr/0024-first-class-summary-providers.md): `SUMMARY_BACKEND` enu
 | Phase 3e-2: notification actions | done | (direct merge) | src/notify.py facade; rules table; click-to-open via -open URL |
 | Phase 3e-3: sidecar configs | done | (direct merge) | src/sidecar.py; 6 allowed keys; fail-fast validation; docs/sidecar.md |
 | Phase 3e-4: TUI config editor | done | (direct merge) | Textual form; src/config_schema shared with sidecar; meetscribe config + verify |
-| Phase 3f: web dashboard | pending | | optional |
+| Phase 3f: web history dashboard | done | (direct merge) | stdlib http.server; src/web.py; meetscribe web command |
 | Phase 3g: first-class transcribe providers | done | (direct merge) | ADR-0023 supersedes 0003; _PROVIDERS dispatch; OPENAI_BASE_URL retired |
 | Phase 3h: first-class summary providers | done | (direct merge) | ADR-0024; src/summarize.py dispatch; per-backend chunking threshold |
 

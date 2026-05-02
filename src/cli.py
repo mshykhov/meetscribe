@@ -262,5 +262,15 @@ def config_verify() -> None:
     raise typer.Exit(1)
 
 
+@app.command("web")
+def web(
+    port: int = typer.Option(8123, "--port", "-p", help="HTTP port"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Bind address"),
+) -> None:
+    """Start a local-only web UI for searching meeting history."""
+    from src.web import serve
+    serve(host=host, port=port)
+
+
 if __name__ == "__main__":
     app()
