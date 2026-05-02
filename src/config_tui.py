@@ -13,12 +13,13 @@ from src.config_io import read_env, write_env
 from src.config_schema import ENV_KEYS, _ENUMS, validate_env
 
 
-_SECRET_KEYS = {"HF_TOKEN", "OPENAI_API_KEY"}
+_SECRET_KEYS = {"HF_TOKEN", "OPENAI_API_KEY", "GROQ_API_KEY"}
 _TAB_LAYOUT: list[tuple[str, list[str]]] = [
-    ("Secrets", ["HF_TOKEN", "OPENAI_API_KEY"]),
+    ("Secrets", ["HF_TOKEN", "OPENAI_API_KEY", "GROQ_API_KEY"]),
     ("Paths", ["CLAUDE_CLI", "WATCH_DIR", "OUTPUT_DIR"]),
     ("Transcribe", ["TRANSCRIBE_BACKEND", "WHISPER_MODEL",
-                    "OPENAI_TRANSCRIBE_MODEL", "LANGUAGE"]),
+                    "OPENAI_TRANSCRIBE_MODEL", "GROQ_TRANSCRIBE_MODEL",
+                    "LANGUAGE"]),
     ("Pipeline", ["MAX_SPEAKERS", "CLAUDE_MODEL"]),
 ]
 

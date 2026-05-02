@@ -30,11 +30,10 @@ class RateLimitedError(Exception):
 DEFAULT_RETRY_AFTER_SEC = 300
 
 
-def _detect_backend(base_url: str | None) -> str:
-    """Return 'groq' or 'openai' based on base URL."""
-    if base_url and "groq" in base_url.lower():
-        return "groq"
-    return "openai"
+_PROVIDERS: dict[str, dict] = {
+    "openai": {"base_url": None},
+    "groq": {"base_url": "https://api.groq.com/openai/v1"},
+}
 
 
 def _parse_retry_after(value: str | None) -> int:
@@ -144,24 +143,29 @@ RETRY_BACKOFF_SEC = 2
 
 def transcribe_via_openai(
     video_path: Path,
+    *,
+    backend: str,
     api_key: str,
     model: str,
     language: str | None,
 ) -> dict:
-    """Transcribe video via OpenAI Whisper API. Returns whisperx-shaped dict.
+    """Transcribe video via OpenAI-compatible provider. Returns whisperx-shaped dict.
 
+    `backend` selects which entry of `_PROVIDERS` to use ('openai' | 'groq').
     Raises RateLimitedError on 429 with parsed Retry-After (no internal retry on 429).
     """
+    if backend not in _PROVIDERS:
+        raise ValueError(f"Unknown transcribe backend: {backend!r}")
     if not api_key:
-        raise ValueError("OPENAI_API_KEY is required when TRANSCRIBE_BACKEND=openai")
+        raise ValueError(f"API key is required when TRANSCRIBE_BACKEND={backend}")
 
-    backend = _detect_backend(os.environ.get("OPENAI_BASE_URL"))
+    base_url = _PROVIDERS[backend]["base_url"]
 
     with tempfile.TemporaryDirectory(prefix="meetscribe-openai-") as tmp:
         audio_path = extract_audio_to_opus(video_path, Path(tmp) / "audio.ogg")
         validate_audio_size(audio_path)
 
-        client = OpenAI(api_key=api_key)
+        client = OpenAI(api_key=api_key, base_url=base_url)
 
         kwargs = {
             "model": model,

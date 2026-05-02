@@ -146,13 +146,11 @@ Local web server на `127.0.0.1:8123`. Drag-and-drop add video, live progress, 
 - All operations available (что и в CLI).
 - WebSocket pushes state changes.
 
-### Phase 3g: Groq integration (pending, optional)
+### Phase 3g: First-class transcribe providers (done)
 
-Variant A из [ADR-0003](adr/0003-openai-backend-base-url-for-groq-compat.md): добавить `OPENAI_BASE_URL` env var, прокинуть в `transcribe_via_openai`. Rate-limit handling уже в 3e, поэтому 3g это лёгкая фаза.
+Per [ADR-0023](adr/0023-first-class-transcribe-providers.md): `TRANSCRIBE_BACKEND` теперь enum `{local, openai, groq}` с per-provider env vars (`OPENAI_API_KEY`/`OPENAI_TRANSCRIBE_MODEL`, `GROQ_API_KEY`/`GROQ_TRANSCRIBE_MODEL`). Старый `OPENAI_BASE_URL` retired (он никогда не передавался в SDK constructor - bug на line 164). Internal `_PROVIDERS` table в `src/openai_transcribe.py` маппит backend → base URL.
 
-**Success criteria:**
-- `TRANSCRIBE_BACKEND=openai` + `OPENAI_BASE_URL=https://api.groq.com/openai/v1` работает.
-- 429 hit виден end-to-end (verified с throttled key).
+**Migration note:** anyone with `OPENAI_BASE_URL=https://api.groq.com/...` в `.env` thinking they used Groq - они на самом деле обрабатывали через api.openai.com (был bug). Чтобы реально использовать Groq: `TRANSCRIBE_BACKEND=groq` + `GROQ_API_KEY=gsk-...` + `GROQ_TRANSCRIBE_MODEL=whisper-large-v3`. `OPENAI_BASE_URL` строка в существующем `.env` тихо игнорируется (passes through `config_io` as unknown KV).
 
 ### Phase 3h: summary backend pluralism (pending, future)
 
@@ -184,7 +182,7 @@ the same backend label. `claude_model` becomes a legacy alias mapping to
 | Phase 3e-3: sidecar configs | done | (direct merge) | src/sidecar.py; 6 allowed keys; fail-fast validation; docs/sidecar.md |
 | Phase 3e-4: TUI config editor | done | (direct merge) | Textual form; src/config_schema shared with sidecar; meetscribe config + verify |
 | Phase 3f: web dashboard | pending | | optional |
-| Phase 3g: Groq | pending | | optional |
+| Phase 3g: first-class transcribe providers | done | (direct merge) | ADR-0023 supersedes 0003; _PROVIDERS dispatch; OPENAI_BASE_URL retired |
 
 ## Open questions deferred to phase specs
 

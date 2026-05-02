@@ -168,7 +168,7 @@ def test_enum_invalid_transcribe_backend(tmp_path):
     from src.sidecar import load_sidecar, SidecarError
     video = tmp_path / "v.mp4"
     sidecar = tmp_path / "v.meetscribe.toml"
-    sidecar.write_text('transcribe_backend = "groq"\n')
+    sidecar.write_text('transcribe_backend = "azure"\n')
     with pytest.raises(SidecarError) as excinfo:
         load_sidecar(video)
     assert "transcribe_backend" in str(excinfo.value)
@@ -200,3 +200,31 @@ def test_enum_valid_transcribe_backend_openai(tmp_path):
     sidecar = tmp_path / "v.meetscribe.toml"
     sidecar.write_text('transcribe_backend = "openai"\n')
     assert load_sidecar(video) == {"transcribe_backend": "openai"}
+
+
+def test_sidecar_allows_groq_backend(tmp_path):
+    """transcribe_backend='groq' is a legal sidecar override."""
+    from src.sidecar import load_sidecar
+    video = tmp_path / "v.mp4"
+    sidecar = tmp_path / "v.meetscribe.toml"
+    sidecar.write_text('transcribe_backend = "groq"\n')
+    assert load_sidecar(video) == {"transcribe_backend": "groq"}
+
+
+def test_sidecar_allows_groq_transcribe_model(tmp_path):
+    from src.sidecar import load_sidecar
+    video = tmp_path / "v.mp4"
+    sidecar = tmp_path / "v.meetscribe.toml"
+    sidecar.write_text('groq_transcribe_model = "whisper-large-v3-turbo"\n')
+    assert load_sidecar(video) == {"groq_transcribe_model": "whisper-large-v3-turbo"}
+
+
+def test_forbidden_key_groq_api_key(tmp_path):
+    from src.sidecar import load_sidecar, SidecarError
+    video = tmp_path / "v.mp4"
+    sidecar = tmp_path / "v.meetscribe.toml"
+    sidecar.write_text('groq_api_key = "gsk-secret"\n')
+    with pytest.raises(SidecarError) as excinfo:
+        load_sidecar(video)
+    assert "forbidden" in str(excinfo.value)
+    assert "groq_api_key" in str(excinfo.value)

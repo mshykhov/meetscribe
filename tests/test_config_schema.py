@@ -10,6 +10,8 @@ def _base_env(tmp_path: Path) -> dict[str, str]:
     return {
         "HF_TOKEN": "hf_abc",
         "OPENAI_API_KEY": "",
+        "GROQ_API_KEY": "",
+        "GROQ_TRANSCRIBE_MODEL": "whisper-large-v3",
         "CLAUDE_CLI": "claude",
         "WATCH_DIR": str(tmp_path),
         "OUTPUT_DIR": str(tmp_path),
@@ -108,8 +110,47 @@ def test_env_invalid_whisper_model(tmp_path):
 
 
 def test_env_invalid_transcribe_backend(tmp_path):
+    """unknown enum value rejected (e.g. 'azure')."""
+    from src.config_schema import validate_env
+    env = _base_env(tmp_path)
+    env["TRANSCRIBE_BACKEND"] = "azure"
+    errors = validate_env(env)
+    assert any(e.key == "TRANSCRIBE_BACKEND" for e in errors)
+
+
+def test_env_groq_backend_in_enum(tmp_path):
+    """transcribe_backend='groq' must be accepted by validate_env."""
     from src.config_schema import validate_env
     env = _base_env(tmp_path)
     env["TRANSCRIBE_BACKEND"] = "groq"
+    env["GROQ_API_KEY"] = "gsk-abc"
     errors = validate_env(env)
-    assert any(e.key == "TRANSCRIBE_BACKEND" for e in errors)
+    backend_errors = [e for e in errors if e.key == "TRANSCRIBE_BACKEND"]
+    assert backend_errors == []
+
+
+def test_env_groq_backend_requires_groq_api_key(tmp_path):
+    from src.config_schema import validate_env
+    env = _base_env(tmp_path)
+    env["TRANSCRIBE_BACKEND"] = "groq"
+    env["GROQ_API_KEY"] = ""
+    errors = validate_env(env)
+    assert any(e.key == "GROQ_API_KEY" for e in errors)
+
+
+def test_env_groq_backend_with_api_key_ok(tmp_path):
+    from src.config_schema import validate_env
+    env = _base_env(tmp_path)
+    env["TRANSCRIBE_BACKEND"] = "groq"
+    env["GROQ_API_KEY"] = "gsk-abc"
+    env["GROQ_TRANSCRIBE_MODEL"] = "whisper-large-v3"
+    assert validate_env(env) == []
+
+
+def test_env_local_backend_no_groq_key_ok(tmp_path):
+    """local backend must not require GROQ_API_KEY."""
+    from src.config_schema import validate_env
+    env = _base_env(tmp_path)
+    env["TRANSCRIBE_BACKEND"] = "local"
+    env["GROQ_API_KEY"] = ""
+    assert validate_env(env) == []

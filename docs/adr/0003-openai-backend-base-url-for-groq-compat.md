@@ -1,6 +1,8 @@
 # ADR-0003: Reuse OpenAI backend for Groq via OPENAI_BASE_URL
 
-Status: Accepted
+> **Superseded by [ADR-0023](0023-first-class-transcribe-providers.md) (2026-05-02).** Variant A introduced `OPENAI_BASE_URL` as the Groq routing knob; in Phase 3g it was replaced with first-class `TRANSCRIBE_BACKEND=groq` + `GROQ_*` env vars. Reason: provider-specific names (Groq key in OPENAI_API_KEY, etc.) are confusing; additionally `OPENAI_BASE_URL` was never plumbed to the OpenAI SDK constructor so it had no runtime effect.
+
+Status: Superseded
 Date: 2026-04-29
 
 ## Context

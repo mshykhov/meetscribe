@@ -10,25 +10,30 @@ _ALLOWED_TYPES: dict[str, type] = {
     "openai_transcribe_model": str, "max_speakers": int, "claude_model": str,
     "hf_token": str, "openai_api_key": str, "claude_cli": str,
     "watch_dir": str, "output_dir": str,
+    "groq_api_key": str, "groq_transcribe_model": str,
 }
 
 ENV_KEYS: tuple[str, ...] = (
-    "HF_TOKEN", "OPENAI_API_KEY", "CLAUDE_CLI", "WATCH_DIR", "OUTPUT_DIR",
-    "TRANSCRIBE_BACKEND", "WHISPER_MODEL", "OPENAI_TRANSCRIBE_MODEL",
+    "HF_TOKEN", "OPENAI_API_KEY", "GROQ_API_KEY",
+    "CLAUDE_CLI", "WATCH_DIR", "OUTPUT_DIR",
+    "TRANSCRIBE_BACKEND", "WHISPER_MODEL",
+    "OPENAI_TRANSCRIBE_MODEL", "GROQ_TRANSCRIBE_MODEL",
     "LANGUAGE", "MAX_SPEAKERS", "CLAUDE_MODEL",
 )
 
 SIDECAR_KEYS: frozenset[str] = frozenset({
     "transcribe_backend", "language", "whisper_model",
-    "openai_transcribe_model", "max_speakers", "claude_model",
+    "openai_transcribe_model", "groq_transcribe_model",
+    "max_speakers", "claude_model",
 })
 
 SIDECAR_FORBIDDEN: frozenset[str] = frozenset({
-    "hf_token", "openai_api_key", "claude_cli", "output_dir", "WATCH_DIR",
+    "hf_token", "openai_api_key", "groq_api_key",
+    "claude_cli", "output_dir", "WATCH_DIR",
 })
 
 _ENUMS: dict[str, frozenset[str]] = {
-    "transcribe_backend": frozenset({"local", "openai"}),
+    "transcribe_backend": frozenset({"local", "openai", "groq"}),
     "whisper_model": frozenset({
         "tiny", "base", "small", "medium", "large-v2", "large-v3",
     }),
@@ -101,7 +106,8 @@ def validate_env(data: dict[str, str]) -> list[ConfigError]:
         # Required-non-empty checks (LANGUAGE and OPENAI_API_KEY may be empty).
         if KEY in {"HF_TOKEN", "CLAUDE_CLI", "WATCH_DIR", "OUTPUT_DIR",
                    "TRANSCRIBE_BACKEND", "WHISPER_MODEL",
-                   "OPENAI_TRANSCRIBE_MODEL", "MAX_SPEAKERS", "CLAUDE_MODEL"}:
+                   "OPENAI_TRANSCRIBE_MODEL", "GROQ_TRANSCRIBE_MODEL",
+                   "MAX_SPEAKERS", "CLAUDE_MODEL"}:
             if raw == "":
                 errors.append(ConfigError(KEY, f"{KEY}: required"))
                 continue
@@ -146,6 +152,13 @@ def validate_env(data: dict[str, str]) -> list[ConfigError]:
         errors.append(
             ConfigError("OPENAI_API_KEY",
                         "OPENAI_API_KEY: required when TRANSCRIBE_BACKEND=openai"),
+        )
+
+    # Cross-key: groq backend requires api key.
+    if data.get("TRANSCRIBE_BACKEND") == "groq" and not data.get("GROQ_API_KEY"):
+        errors.append(
+            ConfigError("GROQ_API_KEY",
+                        "GROQ_API_KEY: required when TRANSCRIBE_BACKEND=groq"),
         )
 
     return errors

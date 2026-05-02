@@ -55,21 +55,6 @@ class TestParseRetryAfter:
         assert 100 <= result <= 130
 
 
-class TestDetectBackend:
-    def test_no_base_url_is_openai(self):
-        from src.openai_transcribe import _detect_backend
-        assert _detect_backend(None) == "openai"
-        assert _detect_backend("") == "openai"
-
-    def test_groq_url_is_groq(self):
-        from src.openai_transcribe import _detect_backend
-        assert _detect_backend("https://api.groq.com/openai/v1") == "groq"
-
-    def test_openai_url_is_openai(self):
-        from src.openai_transcribe import _detect_backend
-        assert _detect_backend("https://api.openai.com/v1") == "openai"
-
-
 class TestRateLimitedError:
     def test_carries_backend_and_seconds(self):
         from src.openai_transcribe import RateLimitedError
@@ -103,12 +88,11 @@ class TestRateLimitOnTranscribe:
         err = RateLimitError("rate limited", response=mock_response, body=None)
         mock_client = MagicMock()
         mock_client.audio.transcriptions.create.side_effect = err
-        monkeypatch.setattr(openai_transcribe, "OpenAI", lambda api_key: mock_client)
-        monkeypatch.setenv("OPENAI_BASE_URL", "https://api.groq.com/openai/v1")
+        monkeypatch.setattr(openai_transcribe, "OpenAI", lambda **kwargs: mock_client)
 
         with pytest.raises(openai_transcribe.RateLimitedError) as excinfo:
             openai_transcribe.transcribe_via_openai(
-                video, api_key="test", model="whisper-1", language=None,
+                video, backend="groq", api_key="test", model="whisper-1", language=None,
             )
         assert excinfo.value.backend == "groq"
         assert excinfo.value.retry_after_seconds == 45

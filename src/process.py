@@ -132,6 +132,8 @@ def load_config() -> dict:
         "transcribe_backend": os.environ.get("TRANSCRIBE_BACKEND", "local"),
         "openai_api_key": os.environ.get("OPENAI_API_KEY", ""),
         "openai_transcribe_model": os.environ.get("OPENAI_TRANSCRIBE_MODEL", "whisper-1"),
+        "groq_api_key": os.environ.get("GROQ_API_KEY", ""),
+        "groq_transcribe_model": os.environ.get("GROQ_TRANSCRIBE_MODEL", "whisper-large-v3"),
     }
 
 
@@ -210,18 +212,21 @@ def transcribe(video_path: str, cfg: dict, video_id: int | None = None) -> dict:
 
     try:
         backend = cfg.get("transcribe_backend", "local")
-        if backend == "openai":
+        if backend in ("openai", "groq"):
             if partial_stage is None:
                 _check_cancelled(video_id)
                 if video_id is not None:
                     _safe_state(state.set_current_stage, video_id, "transcribe")
                     notify_swiftbar_refresh()
-                print(f"[1/4] Transcribing via OpenAI ({cfg['openai_transcribe_model']})...")
+                api_key_cfg = "groq_api_key" if backend == "groq" else "openai_api_key"
+                model_cfg = "groq_transcribe_model" if backend == "groq" else "openai_transcribe_model"
+                print(f"[1/4] Transcribing via {backend} ({cfg[model_cfg]})...")
                 from src.openai_transcribe import transcribe_via_openai
                 data = transcribe_via_openai(
                     Path(video_path),
-                    api_key=cfg["openai_api_key"],
-                    model=cfg["openai_transcribe_model"],
+                    backend=backend,
+                    api_key=cfg[api_key_cfg],
+                    model=cfg[model_cfg],
                     language=cfg.get("language"),
                 )
                 data_file.write_text(json.dumps(data))
