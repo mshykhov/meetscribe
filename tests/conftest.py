@@ -12,6 +12,12 @@ def _disable_swiftbar(monkeypatch):
     monkeypatch.setenv("MEETSCRIBE_DISABLE_SWIFTBAR", "1")
 
 
+@pytest.fixture(autouse=True)
+def _disable_notifications(monkeypatch):
+    """Auto-applied: skip terminal-notifier subprocess in tests."""
+    monkeypatch.setenv("MEETSCRIBE_DISABLE_NOTIFICATIONS", "1")
+
+
 @pytest.fixture
 def db_path(tmp_path: Path, monkeypatch) -> Path:
     target = tmp_path / "state.db"

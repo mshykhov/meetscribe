@@ -107,12 +107,11 @@ class TestProcessVideo:
             return FakeProc()
 
         monkeypatch.setattr(worker.subprocess, "run", fake_run)
-        monkeypatch.setattr(worker, "notify", lambda *a, **kw: None)
 
         video = {"id": v, "path": "/tmp/v.mp4", "state": "queued"}
         worker._process_video(video, threading.Event())
 
-        # Find the subprocess call (could be terminal-notifier, but we mocked notify)
+        # Find the subprocess call (terminal-notifier suppressed via autouse fixture)
         process_calls = [c for c in captured if "src.process" in c]
         assert len(process_calls) == 1
         args = process_calls[0]

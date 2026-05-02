@@ -17,26 +17,12 @@ import time
 from pathlib import Path
 
 from src import state
+from src.notify import notify_event
 from src.swiftbar import notify_swiftbar_refresh
 
 log = logging.getLogger("meetscribed-worker")
 
 PROJECT_ROOT = Path(__file__).parent.parent
-
-
-def notify(title: str, message: str = "", sound: str = "default") -> None:
-    """Wrap terminal-notifier call. Best-effort, swallows errors."""
-    icon = PROJECT_ROOT / "assets" / "icon.png"
-    try:
-        subprocess.run(
-            ["terminal-notifier", "-title", "Meetscribe",
-             "-message", title + (f": {message}" if message else ""),
-             "-sound", sound, "-group", "meetscribe",
-             "-contentImage", str(icon), "-appIcon", str(icon)],
-            timeout=5, capture_output=True,
-        )
-    except Exception as e:
-        log.debug("notify failed: %s", e)
 
 
 def _recover_orphans() -> None:
@@ -73,7 +59,6 @@ def _process_video(video: dict, shutdown: threading.Event) -> None:
     """Run pipeline subprocess for one video."""
     path = video["path"]
     video_id = video["id"]
-    notify(f"Обработка {Path(path).name}", "", sound="Blow")
     notify_swiftbar_refresh()
 
     try:
@@ -87,22 +72,24 @@ def _process_video(video: dict, shutdown: threading.Event) -> None:
         with state.connection() as conn:
             state.transition_state(conn, video_id, "failed",
                                    extra_event_details={"reason": f"subprocess_error: {e}"})
-        notify("ОШИБКА запуска pipeline", Path(path).name, sound="Basso")
+        notify_event("failed", video_id=video_id, video_path=Path(path))
         return
 
     notify_swiftbar_refresh()
+    with state.connection() as conn:
+        row = conn.execute(
+            "SELECT state, output_path FROM videos WHERE id=?", (video_id,)
+        ).fetchone()
+    final_state = row["state"] if row else "unknown"
+    output_path = Path(row["output_path"]) if row and row["output_path"] else None
+
     if result.returncode == 0:
-        notify(f"Готово: {Path(path).name}", "", sound="Glass")
+        notify_event("done", video_id=video_id,
+                     video_path=Path(path), output_path=output_path)
+    elif final_state == "cancelled":
+        pass  # cancellation is user-initiated; no banner.
     else:
-        with state.connection() as conn:
-            row = conn.execute(
-                "SELECT state FROM videos WHERE id=?", (video_id,)
-            ).fetchone()
-        final_state = row["state"] if row else "unknown"
-        if final_state == "cancelled":
-            notify(f"Отменено: {Path(path).name}", "", sound="default")
-        else:
-            notify(f"ОШИБКА: {Path(path).name}", "", sound="Basso")
+        notify_event("failed", video_id=video_id, video_path=Path(path))
 
 
 def main() -> None:

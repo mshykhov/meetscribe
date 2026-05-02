@@ -35,7 +35,6 @@ def test_process_one_happy_path(conn, tmp_path, monkeypatch, patched_subprocess)
     monkeypatch.setattr(watcher, "_is_open", lambda p: False)
     monkeypatch.setattr(watcher, "_get_duration", lambda p: 60.0)
     monkeypatch.setattr(watcher.time, "sleep", lambda s: None)
-    monkeypatch.setattr(watcher, "notify", lambda *a, **kw: None)
 
     shutdown = threading.Event()
     watcher._process_one(str(path.resolve()), shutdown)
@@ -57,7 +56,6 @@ def test_process_one_skips_invalid_duration(conn, tmp_path, monkeypatch, patched
     monkeypatch.setattr(watcher, "_is_open", lambda p: False)
     monkeypatch.setattr(watcher, "_get_duration", lambda p: 2.0)
     monkeypatch.setattr(watcher.time, "sleep", lambda s: None)
-    monkeypatch.setattr(watcher, "notify", lambda *a, **kw: None)
 
     shutdown = threading.Event()
     watcher._process_one(str(path.resolve()), shutdown)
@@ -78,7 +76,6 @@ def test_process_one_skips_already_done(conn, tmp_path, monkeypatch, patched_sub
     conn.commit()
 
     monkeypatch.setattr(watcher.time, "sleep", lambda s: None)
-    monkeypatch.setattr(watcher, "notify", lambda *a, **kw: None)
 
     shutdown = threading.Event()
     watcher._process_one(str(path.resolve()), shutdown)

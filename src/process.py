@@ -19,6 +19,7 @@ import whisperx_mlx
 from dotenv import load_dotenv
 
 from src import state
+from src.notify import notify_event
 from src.state import runner as _state_runner
 from src.swiftbar import notify_swiftbar_refresh
 
@@ -676,6 +677,12 @@ def process_video(video_path: str, video_id: int | None = None) -> Path:
                         )
                 _safe_state(_record_rate_limit)
                 notify_swiftbar_refresh()
+            notify_event(
+                "rate_limited",
+                video_id=video_id,
+                backend=e.backend,
+                retry_after=e.retry_after_seconds,
+            )
             raise
         # Generic exception: mark failed
         if attempt_id is not None and video_id is not None:

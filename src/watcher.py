@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 from src import state
+from src.notify import notify_event
 from src.swiftbar import notify_swiftbar_refresh
 
 log = logging.getLogger("meetscribed-watcher")
@@ -141,22 +142,6 @@ def _wait_for_stable(path: Path, video_id: int, shutdown: threading.Event) -> bo
     return stable_count >= STABILITY_REQUIRED and not shutdown.is_set()
 
 
-def notify(title: str, message: str = "", sound: str = "default") -> None:
-    """Wrap terminal-notifier call. Best-effort, swallows errors."""
-    project_root = Path(__file__).parent.parent
-    icon = project_root / "assets" / "icon.png"
-    try:
-        subprocess.run(
-            ["terminal-notifier", "-title", "Meetscribe",
-             "-message", title + (f": {message}" if message else ""),
-             "-sound", sound, "-group", "meetscribe",
-             "-contentImage", str(icon), "-appIcon", str(icon)],
-            timeout=5, capture_output=True,
-        )
-    except Exception as e:
-        log.debug("notify failed: %s", e)
-
-
 def _process_one(path_str: str, shutdown: threading.Event) -> None:
     """Per-video orchestrator: dedup, stability, validate, dispatch subprocess."""
     path = Path(path_str)
@@ -177,7 +162,7 @@ def _process_one(path_str: str, shutdown: threading.Event) -> None:
             state.transition_state(conn, video_id, "failed",
                                    extra_event_details={"reason": "stability_timeout"})
         notify_swiftbar_refresh()
-        notify("ОШИБКА: таймаут стабилизации", path.name, sound="Basso")
+        notify_event("stability_timeout", video_id=video_id, video_path=path)
         return
 
     if shutdown.is_set():
@@ -189,14 +174,12 @@ def _process_one(path_str: str, shutdown: threading.Event) -> None:
             state.transition_state(conn, video_id, "invalid",
                                    extra_event_details={"reason": reason})
         notify_swiftbar_refresh()
-        notify("Пропущен битый/короткий файл", path.name, sound="Basso")
+        notify_event("invalid", video_id=video_id, video_path=path)
         return
 
     with state.connection() as conn:
         state.transition_state(conn, video_id, "queued")
     notify_swiftbar_refresh()
-
-    notify(f"В очередь: {path.name}", "", sound="default")
 
     try:
         subprocess.run(

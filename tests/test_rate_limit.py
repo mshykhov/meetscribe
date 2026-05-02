@@ -177,3 +177,45 @@ class TestProcessVideoHandlesRateLimit:
             rl = conn.execute("SELECT * FROM rate_limits WHERE backend='groq'").fetchone()
             assert rl is not None
             assert rl["until_ts"] == videos[0]["next_attempt_after"]
+
+    def test_rate_limit_triggers_notify_event(self, fresh_db, tmp_path, monkeypatch):
+        """RateLimitedError -> process.py calls notify_event('rate_limited', ...)."""
+        from src import process, openai_transcribe
+        importlib.reload(openai_transcribe)
+        importlib.reload(process)
+
+        out = tmp_path / "output"
+        out.mkdir()
+        monkeypatch.setenv("OUTPUT_DIR", str(out))
+        monkeypatch.setenv("HF_TOKEN", "hf_test")
+
+        import subprocess
+        video_path = tmp_path / "v.mp4"
+        subprocess.run(
+            ["ffmpeg", "-f", "lavfi", "-i", "color=c=black:s=160x120:d=2",
+             "-f", "lavfi", "-i", "anullsrc=channel_layout=mono:sample_rate=16000:d=2",
+             "-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-shortest",
+             "-y", str(video_path)],
+            check=True, capture_output=True,
+        )
+
+        def fake_transcribe(path, cfg, video_id=None):
+            raise openai_transcribe.RateLimitedError("groq", 60, "429")
+
+        monkeypatch.setattr(process, "transcribe", fake_transcribe)
+
+        called = []
+
+        def spy_notify(event_type, **kwargs):
+            called.append((event_type, kwargs))
+
+        monkeypatch.setattr(process, "notify_event", spy_notify)
+
+        with pytest.raises(openai_transcribe.RateLimitedError):
+            process.process_video(str(video_path))
+
+        rate_calls = [c for c in called if c[0] == "rate_limited"]
+        assert len(rate_calls) == 1
+        kwargs = rate_calls[0][1]
+        assert kwargs["backend"] == "groq"
+        assert kwargs["retry_after"] == 60

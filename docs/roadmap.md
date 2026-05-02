@@ -104,17 +104,24 @@ Wrap `process.py` в Python daemon. launchd plist `com.myron.meetscribe.worker` 
 Phase 3e split into 4 independent sub-phases (per Phase 3e brainstorm 2026-05-01):
 
 - **Phase 3e-1**: Rate-limit handling (done)
-- **Phase 3e-2**: Notification action buttons (pending)
+- **Phase 3e-2**: Smarter notifications + click-to-open (done)
 - **Phase 3e-3**: Sidecar `.meetscribe.toml` configs (pending)
 - **Phase 3e-4**: TUI `meetscribe config` (pending)
 
-Notifications (mechanism TBD: alerter / Swift helper / UNUserNotificationCenter / read-only). Sidecar `.meetscribe.toml` per-video для backend overrides. TUI `meetscribe config` для validated `.env` editing. Полное rate-limit handling (parse Retry-After, write to `rate_limits` table, notify, auto-resume).
+Sidecar `.meetscribe.toml` per-video для backend overrides. TUI `meetscribe config` для validated `.env` editing.
 
 **Success criteria:**
-- Failed notification action buttons (если mechanism поддерживает).
 - Per-video sidecar overrides работают end-to-end.
 - `meetscribe config` validates inputs.
-- 429 от Groq: backend pauses, SwiftBar показывает "Rate-limited until X", auto-resumes.
+
+#### Phase 3e-2: Smarter notifications + click-to-open (done)
+
+`src/notify.py` facade с hardcoded rules table. 4 silent events
+(queued, processing_started, stage_change, cancelled) + 5 actionable
+(stability_timeout, invalid, failed, rate_limited, done) с click
+targets через `terminal-notifier -open file://...`. Дублирующая `notify()` удалена
+из watcher и worker. `MEETSCRIBE_DISABLE_NOTIFICATIONS=1` kill-switch.
+ADR пока не пишется (нет архитектурного решения - просто рефактор).
 
 ### Phase 3f: optional web dashboard (pending)
 
