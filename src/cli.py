@@ -240,9 +240,9 @@ def config_default(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is not None:
         return
     from src.config_tui import run_config_tui
+    from src.paths import env_path as _env_path
 
-    env_path = Path(__file__).resolve().parent.parent / ".env"
-    raise typer.Exit(run_config_tui(env_path))
+    raise typer.Exit(run_config_tui(_env_path()))
 
 
 @config_app.command("verify")
@@ -250,9 +250,9 @@ def config_verify() -> None:
     """Validate current .env. Exits 0 on success, 1 on any error."""
     from src.config_io import read_env
     from src.config_schema import validate_env
+    from src.paths import env_path as _env_path
 
-    env_path = Path(__file__).resolve().parent.parent / ".env"
-    values = read_env(env_path)
+    values = read_env(_env_path())
     errors = validate_env(values)
     if not errors:
         print("OK")
