@@ -47,6 +47,79 @@ _ENUMS: dict[str, frozenset[str]] = {
 }
 
 
+DEFAULTS: dict[str, str] = {
+    "WHISPER_MODEL": "medium",
+    "OPENAI_TRANSCRIBE_MODEL": "whisper-1",
+    "GROQ_TRANSCRIBE_MODEL": "whisper-large-v3",
+    "MAX_SPEAKERS": "0",
+    "CLAUDE_MODEL": "claude-sonnet-4-6",
+    "CLAUDE_CLI": "claude",
+    "WATCH_DIR": "~/Videos/OBS",
+    "OUTPUT_DIR": "~/docs/video",
+    "TRANSCRIBE_BACKEND": "local",
+    "SUMMARY_BACKEND": "claude_code",
+    "OPENAI_SUMMARY_MODEL": "gpt-4o-mini",
+    "GROQ_SUMMARY_MODEL": "llama-3.3-70b-versatile",
+    "LANGUAGE": "",
+    "HF_TOKEN": "",
+    "OPENAI_API_KEY": "",
+    "GROQ_API_KEY": "",
+}
+
+
+MODEL_CHOICES: dict[str, tuple[str, ...]] = {
+    "OPENAI_TRANSCRIBE_MODEL": ("whisper-1",),
+    "GROQ_TRANSCRIBE_MODEL": ("whisper-large-v3", "whisper-large-v3-turbo"),
+    "CLAUDE_MODEL": (
+        "claude-sonnet-4-6", "claude-haiku-4-5", "claude-opus-4-7",
+    ),
+    "OPENAI_SUMMARY_MODEL": (
+        "gpt-4o-mini", "gpt-4o", "gpt-5-mini", "o3-mini",
+    ),
+    "GROQ_SUMMARY_MODEL": (
+        "llama-3.3-70b-versatile",
+        "kimi-k2-instruct",
+        "mixtral-8x7b-32768",
+    ),
+}
+
+
+DESCRIPTIONS: dict[str, str] = {
+    "HF_TOKEN":
+        "HuggingFace token (hf_...). Required for Senko diarization.",
+    "OPENAI_API_KEY":
+        "OpenAI API key (sk-...). Required when openai is the transcribe or summary backend.",
+    "GROQ_API_KEY":
+        "Groq API key (gsk-...). Required when groq is the transcribe or summary backend.",
+    "CLAUDE_CLI":
+        "Path/name of Claude Code CLI binary. Default: 'claude' (must be on PATH).",
+    "WATCH_DIR":
+        "Folder where new videos appear. Watcher picks them up automatically.",
+    "OUTPUT_DIR":
+        "Where summaries and transcripts are written.",
+    "TRANSCRIBE_BACKEND":
+        "Which provider runs transcription: local (whisperx-mlx) | openai | groq.",
+    "WHISPER_MODEL":
+        "Whisperx-mlx model size. Used only when TRANSCRIBE_BACKEND=local.",
+    "OPENAI_TRANSCRIBE_MODEL":
+        "OpenAI Whisper model. Used only when TRANSCRIBE_BACKEND=openai.",
+    "GROQ_TRANSCRIBE_MODEL":
+        "Groq Whisper model. Used only when TRANSCRIBE_BACKEND=groq.",
+    "LANGUAGE":
+        "ISO code (ru, en, de). Empty = auto-detect.",
+    "MAX_SPEAKERS":
+        "Hint for diarization: number of speakers in the meeting. 0 = auto.",
+    "SUMMARY_BACKEND":
+        "Which provider generates the summary: claude_code (CLI) | openai | groq.",
+    "CLAUDE_MODEL":
+        "Claude model name. Used only when SUMMARY_BACKEND=claude_code.",
+    "OPENAI_SUMMARY_MODEL":
+        "OpenAI Chat Completions model. Used only when SUMMARY_BACKEND=openai.",
+    "GROQ_SUMMARY_MODEL":
+        "Groq Chat Completions model. Used only when SUMMARY_BACKEND=groq.",
+}
+
+
 class ConfigError(ValueError):
     """One validation error. `str(err)` returns the message verbatim."""
     def __init__(self, key: str, message: str):
@@ -77,6 +150,40 @@ def _check_value(key: str, value, prefix: str = "sidecar") -> None:
         raise ConfigError(key, f"{prefix}: max_speakers must be >= 0")
 
 
+def _required_keys(data: dict[str, str]) -> set[str]:
+    """Return the set of ENV_KEYS that must be non-empty for the current backend choices.
+
+    Always required: HF_TOKEN, CLAUDE_CLI, WATCH_DIR, OUTPUT_DIR, TRANSCRIBE_BACKEND,
+                     MAX_SPEAKERS, SUMMARY_BACKEND.
+    Conditionally required:
+      WHISPER_MODEL              when TRANSCRIBE_BACKEND=local
+      OPENAI_TRANSCRIBE_MODEL    when TRANSCRIBE_BACKEND=openai
+      GROQ_TRANSCRIBE_MODEL      when TRANSCRIBE_BACKEND=groq
+      CLAUDE_MODEL               when SUMMARY_BACKEND=claude_code
+      OPENAI_SUMMARY_MODEL       when SUMMARY_BACKEND=openai
+      GROQ_SUMMARY_MODEL         when SUMMARY_BACKEND=groq
+    """
+    base = {
+        "HF_TOKEN", "CLAUDE_CLI", "WATCH_DIR", "OUTPUT_DIR",
+        "TRANSCRIBE_BACKEND", "MAX_SPEAKERS", "SUMMARY_BACKEND",
+    }
+    transcribe = data.get("TRANSCRIBE_BACKEND", "")
+    summary = data.get("SUMMARY_BACKEND", "")
+    if transcribe == "local":
+        base.add("WHISPER_MODEL")
+    elif transcribe == "openai":
+        base.add("OPENAI_TRANSCRIBE_MODEL")
+    elif transcribe == "groq":
+        base.add("GROQ_TRANSCRIBE_MODEL")
+    if summary == "claude_code":
+        base.add("CLAUDE_MODEL")
+    elif summary == "openai":
+        base.add("OPENAI_SUMMARY_MODEL")
+    elif summary == "groq":
+        base.add("GROQ_SUMMARY_MODEL")
+    return base
+
+
 def validate_sidecar(data: dict) -> dict:
     """Validate a parsed sidecar TOML. Raises ConfigError on first problem."""
     out: dict = {}
@@ -105,18 +212,14 @@ def validate_env(data: dict[str, str]) -> list[ConfigError]:
     Cross-key rule: TRANSCRIBE_BACKEND='openai' requires OPENAI_API_KEY.
     """
     errors: list[ConfigError] = []
+    required = _required_keys(data)
 
     for KEY in ENV_KEYS:
         raw = data.get(KEY, "")
         key_lower = KEY.lower()
 
-        # Required-non-empty checks (LANGUAGE and OPENAI_API_KEY may be empty).
-        if KEY in {"HF_TOKEN", "CLAUDE_CLI", "WATCH_DIR", "OUTPUT_DIR",
-                   "TRANSCRIBE_BACKEND", "WHISPER_MODEL",
-                   "OPENAI_TRANSCRIBE_MODEL", "GROQ_TRANSCRIBE_MODEL",
-                   "MAX_SPEAKERS", "CLAUDE_MODEL",
-                   "SUMMARY_BACKEND",
-                   "OPENAI_SUMMARY_MODEL", "GROQ_SUMMARY_MODEL"}:
+        # Required-non-empty checks: backend-aware (only required when active backend uses them).
+        if KEY in required:
             if raw == "":
                 errors.append(ConfigError(KEY, f"{KEY}: required"))
                 continue

@@ -75,3 +75,29 @@ async def test_app_quit_does_not_write(env_file):
         hf_input.value = "hf_modified"
         await pilot.press("f10")
     assert read_env(env_file)["HF_TOKEN"] == "hf_abc"
+
+
+async def test_app_loads_defaults_when_env_missing_keys(tmp_path):
+    """If a .env lacks GROQ_TRANSCRIBE_MODEL, the widget shows the schema default."""
+    from src.config_tui import ConfigApp
+    from src.config_schema import DEFAULTS
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "HF_TOKEN=hf_abc\n"
+        "CLAUDE_CLI=claude\n"
+        f"WATCH_DIR={tmp_path}\n"
+        f"OUTPUT_DIR={tmp_path}\n"
+        "TRANSCRIBE_BACKEND=local\n"
+        "WHISPER_MODEL=medium\n"
+        "MAX_SPEAKERS=0\n"
+        "CLAUDE_MODEL=claude-sonnet-4-6\n"
+        "SUMMARY_BACKEND=claude_code\n"
+    )
+
+    app = ConfigApp(env_file)
+    async with app.run_test():
+        groq_field = app.query_one("#field-GROQ_TRANSCRIBE_MODEL")
+        assert groq_field.value == DEFAULTS["GROQ_TRANSCRIBE_MODEL"]
+        openai_summary = app.query_one("#field-OPENAI_SUMMARY_MODEL")
+        assert openai_summary.value == DEFAULTS["OPENAI_SUMMARY_MODEL"]

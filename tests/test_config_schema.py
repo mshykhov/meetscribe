@@ -82,6 +82,71 @@ def test_env_shared_provider_key_message_format(tmp_path):
     assert "openai provider" in msgs[0]
 
 
+def test_defaults_cover_all_env_keys():
+    """Every ENV_KEYS entry must have a DEFAULTS entry (catches schema drift)."""
+    from src.config_schema import DEFAULTS, ENV_KEYS
+    missing = set(ENV_KEYS) - set(DEFAULTS)
+    assert not missing, f"DEFAULTS missing keys: {missing}"
+
+
+def test_descriptions_cover_all_env_keys():
+    """Every ENV_KEYS entry must have a DESCRIPTIONS entry."""
+    from src.config_schema import DESCRIPTIONS, ENV_KEYS
+    missing = set(ENV_KEYS) - set(DESCRIPTIONS)
+    assert not missing, f"DESCRIPTIONS missing keys: {missing}"
+
+
+def test_required_keys_local_backend_does_not_require_openai_or_groq_models(tmp_path):
+    """When TRANSCRIBE_BACKEND=local + SUMMARY_BACKEND=claude_code, only WHISPER_MODEL
+    + CLAUDE_MODEL are model-required; OPENAI_*/GROQ_* model fields are optional."""
+    from src.config_schema import _required_keys
+    data = {"TRANSCRIBE_BACKEND": "local", "SUMMARY_BACKEND": "claude_code"}
+    req = _required_keys(data)
+    assert "WHISPER_MODEL" in req
+    assert "CLAUDE_MODEL" in req
+    assert "OPENAI_TRANSCRIBE_MODEL" not in req
+    assert "GROQ_TRANSCRIBE_MODEL" not in req
+    assert "OPENAI_SUMMARY_MODEL" not in req
+    assert "GROQ_SUMMARY_MODEL" not in req
+
+
+def test_required_keys_openai_summary_requires_openai_summary_model(tmp_path):
+    from src.config_schema import _required_keys
+    data = {"TRANSCRIBE_BACKEND": "local", "SUMMARY_BACKEND": "openai"}
+    req = _required_keys(data)
+    assert "OPENAI_SUMMARY_MODEL" in req
+    assert "GROQ_SUMMARY_MODEL" not in req
+    assert "CLAUDE_MODEL" not in req
+
+
+def test_required_keys_groq_transcribe_requires_groq_transcribe_model(tmp_path):
+    from src.config_schema import _required_keys
+    data = {"TRANSCRIBE_BACKEND": "groq", "SUMMARY_BACKEND": "claude_code"}
+    req = _required_keys(data)
+    assert "GROQ_TRANSCRIBE_MODEL" in req
+    assert "OPENAI_TRANSCRIBE_MODEL" not in req
+    assert "WHISPER_MODEL" not in req
+
+
+def test_validate_env_accepts_local_backend_with_empty_openai_groq_models(tmp_path):
+    """End-to-end: a .env using only local + claude_code with empty cloud model fields validates clean."""
+    from src.config_schema import validate_env
+    env = {
+        "HF_TOKEN": "hf_abc", "CLAUDE_CLI": "claude",
+        "WATCH_DIR": str(tmp_path), "OUTPUT_DIR": str(tmp_path),
+        "TRANSCRIBE_BACKEND": "local", "WHISPER_MODEL": "medium",
+        "MAX_SPEAKERS": "0",
+        "CLAUDE_MODEL": "claude-sonnet-4-6",
+        "SUMMARY_BACKEND": "claude_code",
+        # Empty cloud-provider fields - should NOT block validation:
+        "OPENAI_API_KEY": "", "GROQ_API_KEY": "",
+        "OPENAI_TRANSCRIBE_MODEL": "", "GROQ_TRANSCRIBE_MODEL": "",
+        "OPENAI_SUMMARY_MODEL": "", "GROQ_SUMMARY_MODEL": "",
+        "LANGUAGE": "",
+    }
+    assert validate_env(env) == []
+
+
 def test_env_minimal_valid(tmp_path):
     from src.config_schema import validate_env
     assert validate_env(_base_env(tmp_path)) == []

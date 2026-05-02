@@ -155,6 +155,10 @@ Per [ADR-0024](adr/0024-first-class-summary-providers.md): `SUMMARY_BACKEND` enu
 
 `bootstrap.sh` (curl-pipeable) downloads the source tarball, sets up an isolated venv at `~/.local/share/meetscribe/`, bootstraps launchd (watcher + worker), and installs a `meetscribe` shim into `~/.local/bin/`. Re-running upgrades. `meetscribe self-uninstall` removes everything cleanly with a hard guard against deleting non-default `OUTPUT_DIR`. `meetscribe self-update` re-runs the bootstrap one-liner. Plists are now rendered from templates at install time (`scripts/render_plists.py`) instead of static files in the repo root. Dev mode (clone + `pip install -e .`) is preserved via XDG-aware path resolution in `src/paths.py`.
 
+### Phase 3j: Config TUI UX overhaul (done)
+
+`src/config_schema.py` exposes three new dicts: `DEFAULTS` (per-key fallback values), `MODEL_CHOICES` (curated model lists for free-text fields), `DESCRIPTIONS` (one-line helper text). `_required_keys(data)` makes validation backend-aware: cloud-provider model fields are required only when their backend is the active selection. `src/config_tui.py` pre-populates widgets with defaults when `.env` lacks a key, renders curated `Select` dropdowns for model fields (Claude/OpenAI/Groq summaries; OpenAI/Groq transcribe), and shows inline helper text under each widget. Drift tests on `DEFAULTS` and `DESCRIPTIONS` ensure new env keys can't be added without TUI metadata.
+
 ## Status board
 
 Обновлять при merge каждой phase.
@@ -175,6 +179,7 @@ Per [ADR-0024](adr/0024-first-class-summary-providers.md): `SUMMARY_BACKEND` enu
 | Phase 3g: first-class transcribe providers | done | (direct merge) | ADR-0023 supersedes 0003; _PROVIDERS dispatch; OPENAI_BASE_URL retired |
 | Phase 3h: first-class summary providers | done | (direct merge) | ADR-0024; src/summarize.py dispatch; per-backend chunking threshold |
 | Phase 3i: standalone install/update/uninstall | done | (direct merge) | bootstrap.sh; src/paths.py XDG; render_plists.py; meetscribe self-uninstall/self-update |
+| Phase 3j: TUI UX overhaul | done | (direct merge) | DEFAULTS / MODEL_CHOICES / DESCRIPTIONS dicts; backend-aware validation; Select dropdowns; helper text |
 
 ## Open questions deferred to phase specs
 

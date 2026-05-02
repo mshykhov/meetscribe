@@ -37,6 +37,13 @@ def _enum_for(key: str) -> tuple[str, ...] | None:
 
 
 class ConfigApp(App):
+    CSS = """
+    .helper {
+        color: $text-muted;
+        margin: 0 0 1 2;
+        text-style: italic;
+    }
+    """
     BINDINGS = [
         ("f2", "save", "Save"),
         ("f10", "quit", "Quit"),
@@ -51,6 +58,7 @@ class ConfigApp(App):
         self.last_error: str = ""
 
     def compose(self) -> ComposeResult:
+        from src.config_schema import DESCRIPTIONS
         yield Header()
         with TabbedContent():
             for tab_name, keys in _TAB_LAYOUT:
@@ -58,11 +66,14 @@ class ConfigApp(App):
                     for key in keys:
                         yield Label(key)
                         yield from self._build_widget(key)
+                        if key in DESCRIPTIONS:
+                            yield Static(DESCRIPTIONS[key], classes="helper")
         yield Static("", id="status")
         yield Footer()
 
     def _build_widget(self, key: str):
-        value = self._values.get(key, "")
+        from src.config_schema import DEFAULTS, MODEL_CHOICES
+        value = self._values.get(key, "") or DEFAULTS.get(key, "")
         choices = _enum_for(key)
         if choices is not None:
             yield Select(
@@ -71,12 +82,25 @@ class ConfigApp(App):
                 id=f"field-{key}",
                 allow_blank=False,
             )
-        else:
-            yield Input(
-                value=value,
-                password=(key in _SECRET_KEYS),
+            return
+        curated = MODEL_CHOICES.get(key)
+        if curated is not None:
+            # Union curated options with the user's existing value (so we never lose it).
+            options = list(curated)
+            if value and value not in options:
+                options.append(value)
+            yield Select(
+                [(c, c) for c in options],
+                value=value if value else options[0],
                 id=f"field-{key}",
+                allow_blank=False,
             )
+            return
+        yield Input(
+            value=value,
+            password=(key in _SECRET_KEYS),
+            id=f"field-{key}",
+        )
 
     def _collect_values(self) -> dict[str, str]:
         out: dict[str, str] = dict(self._values)
