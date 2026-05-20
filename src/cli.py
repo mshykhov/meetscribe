@@ -128,6 +128,124 @@ def skip(id_or_path: str) -> None:
 
 
 @app.command()
+def resummarize(
+    folder: Path = typer.Argument(..., help="Output folder containing -transcript.txt"),
+    rename: bool = typer.Option(
+        True, "--rename/--no-rename",
+        help="Rename folder + files if new topic differs from current (default: yes)",
+    ),
+) -> None:
+    """Regenerate summary.md from existing transcript.
+
+    Reads <folder>/*-transcript.txt, calls the configured summary backend,
+    overwrites *-summary.md. By default also renames the folder + all files
+    inside if the new short title differs, and updates videos.output_path in
+    state.db. Useful for folders left as `<date>-meeting` after summary failed.
+    """
+    from src.process import (
+        derive_topic_from_transcript,
+        extract_topic,
+        generate_summary,
+        load_config,
+        sanitize_filename,
+    )
+
+    folder = folder.resolve()
+    if not folder.is_dir():
+        typer.echo(f"Not a directory: {folder}", err=True)
+        raise typer.Exit(code=1)
+
+    transcript_files = list(folder.glob("*-transcript.txt"))
+    if not transcript_files:
+        typer.echo(f"No *-transcript.txt found in {folder}", err=True)
+        raise typer.Exit(code=1)
+    if len(transcript_files) > 1:
+        typer.echo(
+            f"Multiple transcripts in {folder} - ambiguous: "
+            f"{[p.name for p in transcript_files]}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    transcript_path = transcript_files[0]
+    transcript = transcript_path.read_text(encoding="utf-8")
+
+    cfg = load_config()
+    typer.echo(f"Generating summary via {cfg['summary_backend']}...")
+    summary = generate_summary(transcript, cfg)
+
+    new_topic = extract_topic(summary)
+    if new_topic in ("", "meeting"):
+        new_topic = derive_topic_from_transcript(transcript)
+
+    import re as _re
+    base = transcript_path.name.removesuffix("-transcript.txt")
+    m = _re.match(r"^(\d{4}-\d{2}-\d{2}(?:-\d{2}\.\d{2})?)-(.+)$", base)
+    if m is None:
+        typer.echo(
+            f"Cannot parse folder name '{base}' - expected "
+            "YYYY-MM-DD[-HH.MM]-topic format",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    date_str = m.group(1)
+    old_topic = m.group(2)
+
+    summary_path = folder / f"{base}-summary.md"
+    summary_path.write_text(summary, encoding="utf-8")
+    typer.echo(f"Wrote {summary_path}")
+
+    new_topic_sanitized = sanitize_filename(new_topic) or "meeting"
+    if not rename or new_topic_sanitized == sanitize_filename(old_topic):
+        with state.connection() as conn:
+            runner.apply_migrations(conn)
+            row = conn.execute(
+                "SELECT id FROM videos WHERE output_path=?", (str(folder),)
+            ).fetchone()
+            if row is not None:
+                state.upsert_meeting_fts(
+                    conn, row["id"], folder.name, transcript, summary,
+                )
+                conn.commit()
+        typer.echo("Done.")
+        return
+
+    new_base = f"{date_str}-{new_topic_sanitized}"
+    new_folder = folder.parent / new_base
+    if new_folder.exists():
+        for i in range(2, 100):
+            candidate = folder.parent / f"{new_base}-{i}"
+            if not candidate.exists():
+                new_folder = candidate
+                new_base = f"{new_base}-{i}"
+                break
+
+    new_folder_tmp = folder.parent / f".tmp-rename-{int(_time.time())}-{new_base}"
+    folder.rename(new_folder_tmp)
+    for p in list(new_folder_tmp.iterdir()):
+        if p.name.startswith(base):
+            new_name = new_base + p.name[len(base):]
+            p.rename(new_folder_tmp / new_name)
+    new_folder_tmp.rename(new_folder)
+    typer.echo(f"Renamed: {folder.name} -> {new_folder.name}")
+
+    with state.connection() as conn:
+        runner.apply_migrations(conn)
+        conn.execute(
+            "UPDATE videos SET output_path=? WHERE output_path=?",
+            (str(new_folder), str(folder)),
+        )
+        row = conn.execute(
+            "SELECT id FROM videos WHERE output_path=?", (str(new_folder),)
+        ).fetchone()
+        if row is not None:
+            state.upsert_meeting_fts(
+                conn, row["id"], new_folder.name, transcript, summary,
+            )
+        conn.commit()
+    typer.echo("Updated state.db output_path.")
+
+
+@app.command()
 def reprocess(id_or_path: str) -> None:
     """Archive existing output_dir (rename) and reset state to 'detected'."""
     with state.connection() as conn:
@@ -260,6 +378,94 @@ def config_verify() -> None:
     for err in errors:
         print(f"ERROR {err.message}")
     raise typer.Exit(1)
+
+
+@app.command()
+def search(
+    query: str = typer.Argument(..., help="FTS5 query - words, prefixes (foo*), phrases (\"a b\")"),
+    limit: int = typer.Option(20, "--limit", "-n"),
+) -> None:
+    """Full-text search across meeting transcripts and summaries."""
+    with state.connection() as conn:
+        runner.apply_migrations(conn)
+        try:
+            rows = state.search_meeting_fts(conn, query, limit=limit)
+        except Exception as e:
+            typer.echo(f"Search failed: {e}", err=True)
+            raise typer.Exit(code=1)
+    if not rows:
+        typer.echo("No matches.")
+        raise typer.Exit(code=0)
+    for r in rows:
+        folder = r.get("output_path") or "-"
+        typer.echo(f"[{r['id']}] {folder}")
+        snippet = (r.get("transcript_snippet") or "").strip()
+        if snippet:
+            typer.echo(f"   transcript: {snippet}")
+        sm = (r.get("summary_snippet") or "").strip()
+        if sm:
+            typer.echo(f"   summary:    {sm}")
+
+
+@app.command("reindex")
+def reindex(
+    output_dir: Path = typer.Option(
+        None, "--output-dir",
+        help="Override OUTPUT_DIR root. Default: cfg['output_dir'] from .env",
+    ),
+) -> None:
+    """Backfill FTS5 index from existing transcript/summary files on disk.
+
+    Walks <output_dir>/* looking for <base>-transcript.txt + <base>-summary.md
+    pairs. Each match is upserted into meeting_fts. If a matching row exists
+    in videos (by output_path), its video_id is reused; otherwise a synthetic
+    negative id is generated so the meeting is still searchable.
+    """
+    import sqlite3 as _sql
+    from src.process import load_config
+
+    root = output_dir
+    if root is None:
+        cfg = load_config()
+        root = cfg["output_dir"]
+    root = Path(root).expanduser().resolve()
+    if not root.is_dir():
+        typer.echo(f"Not a directory: {root}", err=True)
+        raise typer.Exit(code=1)
+
+    with state.connection() as conn:
+        runner.apply_migrations(conn)
+        indexed = 0
+        skipped = 0
+        synthetic_next = -1
+        for folder in sorted(p for p in root.iterdir() if p.is_dir()):
+            transcripts = list(folder.glob("*-transcript.txt"))
+            if not transcripts:
+                continue
+            tpath = transcripts[0]
+            base = tpath.name.removesuffix("-transcript.txt")
+            spath = folder / f"{base}-summary.md"
+            if not spath.exists():
+                skipped += 1
+                continue
+            transcript = tpath.read_text(encoding="utf-8", errors="replace")
+            summary = spath.read_text(encoding="utf-8", errors="replace")
+            row = conn.execute(
+                "SELECT id FROM videos WHERE output_path=?", (str(folder),)
+            ).fetchone()
+            if row is not None:
+                video_id = row["id"]
+            else:
+                video_id = synthetic_next
+                synthetic_next -= 1
+            try:
+                state.upsert_meeting_fts(conn, video_id, folder.name, transcript, summary)
+                indexed += 1
+            except _sql.Error as e:
+                typer.echo(f"  skip {folder.name}: {e}", err=True)
+                skipped += 1
+        conn.commit()
+    typer.echo(f"Reindexed {indexed} meetings, skipped {skipped}.")
 
 
 @app.command("web")

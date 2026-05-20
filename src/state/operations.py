@@ -252,3 +252,48 @@ def get_events(conn: sqlite3.Connection, video_id: int, limit: int = 100) -> lis
         (video_id, limit),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def upsert_meeting_fts(
+    conn: sqlite3.Connection,
+    video_id: int,
+    folder_name: str,
+    transcript: str,
+    summary: str,
+) -> None:
+    """Replace the FTS row for video_id (delete-then-insert)."""
+    conn.execute("DELETE FROM meeting_fts WHERE video_id = ?", (video_id,))
+    conn.execute(
+        "INSERT INTO meeting_fts (video_id, folder_name, transcript, summary) "
+        "VALUES (?, ?, ?, ?)",
+        (video_id, folder_name, transcript, summary),
+    )
+
+
+def search_meeting_fts(
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int = 50,
+) -> list[dict]:
+    """Run FTS5 MATCH against meeting_fts, return rows joined with videos.
+
+    Each row includes video columns plus snippet() excerpts and bm25 rank.
+    Empty query returns []. Uses FTS5 'NEAR' relevance via bm25.
+    """
+    if not query.strip():
+        return []
+    rows = conn.execute(
+        """
+        SELECT v.id, v.path, v.state, v.detected_at, v.completed_at,
+               v.output_path, v.backend_used, v.duration_sec,
+               snippet(meeting_fts, 2, '<mark>', '</mark>', '...', 12) AS transcript_snippet,
+               snippet(meeting_fts, 3, '<mark>', '</mark>', '...', 12) AS summary_snippet,
+               bm25(meeting_fts) AS rank
+        FROM meeting_fts
+        JOIN videos v ON v.id = meeting_fts.video_id
+        WHERE meeting_fts MATCH ?
+        ORDER BY rank LIMIT ?
+        """,
+        (query, limit),
+    ).fetchall()
+    return [dict(r) for r in rows]

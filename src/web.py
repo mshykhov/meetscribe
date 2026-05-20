@@ -69,6 +69,25 @@ from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 
+def _apply_filters(
+    rows: list[dict],
+    state_filter: str,
+    from_ts: int | None,
+    to_ts: int | None,
+) -> list[dict]:
+    out = []
+    for r in rows:
+        if state_filter and r.get("state") != state_filter:
+            continue
+        det = r.get("detected_at")
+        if from_ts is not None and (det is None or det < from_ts):
+            continue
+        if to_ts is not None and (det is None or det > to_ts):
+            continue
+        out.append(r)
+    return out
+
+
 _HTML = """<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"/>
@@ -205,6 +224,13 @@ class _Handler(BaseHTTPRequestHandler):
         from_ts = int(from_ts) if from_ts else None
         to_ts = int(to_ts) if to_ts else None
         with state.connection() as conn:
+            if q.strip() and not q.startswith("/"):
+                try:
+                    fts_rows = state.search_meeting_fts(conn, q, limit=200)
+                except Exception:
+                    fts_rows = []
+                if fts_rows:
+                    return _apply_filters(fts_rows, st, from_ts, to_ts)
             return search_videos(conn, q, st, from_ts, to_ts)
 
 

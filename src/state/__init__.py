@@ -21,6 +21,8 @@ from src.state.operations import (
     mark_for_retry,
     set_rate_limit,
     set_video_next_attempt,
+    upsert_meeting_fts,
+    search_meeting_fts,
 )
 
 __all__ = [
@@ -44,4 +46,6 @@ __all__ = [
     "mark_for_retry",
     "set_rate_limit",
     "set_video_next_attempt",
+    "upsert_meeting_fts",
+    "search_meeting_fts",
 ]
