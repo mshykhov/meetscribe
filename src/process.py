@@ -515,9 +515,40 @@ def extract_topic(summary: str) -> str:
             for next_line in lines[i + 1 : i + 3]:
                 text = next_line.strip().strip("#").strip("-").strip()
                 text = text.strip('"').strip("'").strip("`")
-                if text:
+                if text and sanitize_filename(text) not in ("", "meeting"):
                     return sanitize_filename(text)
     return "meeting"
+
+
+_TRANSCRIPT_LINE_RE = re.compile(r"^\[\d{1,2}:\d{2}\]\s+\S+?:\s*(.*)$")
+
+
+def derive_topic_from_transcript(transcript: str, max_words: int = 6) -> str:
+    """Build a short slug from the first non-trivial words of a transcript.
+
+    Used as a fallback when LLM summary generation fails - so the meeting folder
+    gets a vaguely descriptive name instead of the generic 'meeting'.
+    Strips '[MM:SS] SPEAKER_XX:' prefixes, collects the first <max_words> tokens
+    of content, then runs through sanitize_filename for translit/safety.
+    """
+    words: list[str] = []
+    for raw in transcript.splitlines():
+        match = _TRANSCRIPT_LINE_RE.match(raw.strip())
+        body = match.group(1) if match else raw.strip()
+        if not body:
+            continue
+        for token in body.split():
+            cleaned = re.sub(r"[^\w-]", "", token, flags=re.UNICODE)
+            if len(cleaned) >= 2:
+                words.append(cleaned)
+                if len(words) >= max_words:
+                    break
+        if len(words) >= max_words:
+            break
+    if not words:
+        return "meeting"
+    slug = sanitize_filename(" ".join(words))
+    return slug or "meeting"
 
 
 _TRANSLIT = {
@@ -631,14 +662,25 @@ def process_video(video_path: str, video_id: int | None = None) -> Path:
             notify_swiftbar_refresh()
         print(f"[4/4] Generating summary via {cfg['summary_backend']}...")
         stage_reached = "summary"
+        summary_failed = False
+        summary_error: Exception | None = None
         try:
             summary = generate_summary(transcript, cfg)
         except Exception as e:
+            # RateLimitedError is re-raised below for the worker to defer the
+            # job; only non-rate-limit failures get the placeholder summary.
+            from src.openai_transcribe import RateLimitedError as _RLE
+            if isinstance(e, _RLE):
+                raise
             print(f"WARNING: Summary generation failed: {e}")
+            summary_failed = True
+            summary_error = e
+            fallback_topic = derive_topic_from_transcript(transcript)
             summary = (
-                "### Короткое название\nmeeting\n\n"
+                f"### Короткое название\n{fallback_topic}\n\n"
                 f"### Summary unavailable\n\nError: {e}\n\n"
-                "Transcript was saved successfully."
+                "Transcript was saved successfully. "
+                "Run `meetscribe resummarize <folder>` to retry summary generation."
             )
 
         output_dir = organize_files(video_path, transcript, summary, date_str, cfg)
@@ -652,7 +694,21 @@ def process_video(video_path: str, video_id: int | None = None) -> Path:
                 )
             _safe_state(_clear_partial)
             _safe_state(state.complete_attempt, attempt_id, video_id, str(output_dir))
+            _safe_state(
+                state.upsert_meeting_fts,
+                video_id, output_dir.name, transcript, summary,
+            )
             notify_swiftbar_refresh()
+
+        if summary_failed:
+            summary_md = next(output_dir.glob("*-summary.md"), None)
+            notify_event(
+                "summary_failed",
+                video_id=video_id,
+                video_path=Path(video_path),
+                output_path=summary_md,
+                backend=cfg["summary_backend"],
+            )
 
         print("=" * 60)
         print(f"Done! Output: {output_dir}")

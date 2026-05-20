@@ -155,3 +155,72 @@ def test_openai_sdk_429_raises_rate_limited_error(monkeypatch):
 
     assert excinfo.value.backend == "groq"
     assert excinfo.value.retry_after_seconds == 30
+
+
+def test_groq_413_tpm_rate_limit_raises_rate_limited_error(monkeypatch):
+    """Groq returns HTTP 413 + body.error.code='rate_limit_exceeded' for TPM throttling.
+
+    OpenAI SDK wraps 413 in APIStatusError (subclass of BadRequestError, NOT RateLimitError).
+    Without explicit handling these were swallowed by process.py's generic except and
+    replaced with a 'meeting' placeholder summary instead of being retried.
+    """
+    import importlib
+    from src import openai_transcribe, summarize
+    importlib.reload(openai_transcribe)
+    importlib.reload(summarize)
+    from src.openai_transcribe import RateLimitedError
+    from openai import APIStatusError
+
+    cfg = {
+        "summary_backend": "groq",
+        "groq_api_key": "gsk-abc",
+        "groq_summary_model": "llama-3.3-70b-versatile",
+    }
+
+    mock_response = MagicMock()
+    mock_response.headers = {}
+    mock_response.status_code = 413
+    body = {
+        "error": {
+            "message": "Request too large for model `llama-3.3-70b-versatile`",
+            "type": "tokens",
+            "code": "rate_limit_exceeded",
+        }
+    }
+    err = APIStatusError("request too large", response=mock_response, body=body)
+    client = MagicMock()
+    client.chat.completions.create.side_effect = err
+    monkeypatch.setattr(summarize, "OpenAI", lambda **k: client)
+
+    with pytest.raises(RateLimitedError) as excinfo:
+        summarize.call_summary_provider("test", cfg)
+
+    assert excinfo.value.backend == "groq"
+    assert excinfo.value.retry_after_seconds == 60
+
+
+def test_groq_other_400_errors_propagate(monkeypatch):
+    """Non-rate-limit 4xx errors (e.g. invalid model) must NOT be wrapped as rate-limit."""
+    import importlib
+    from src import openai_transcribe, summarize
+    importlib.reload(openai_transcribe)
+    importlib.reload(summarize)
+    from openai import APIStatusError
+
+    cfg = {
+        "summary_backend": "groq",
+        "groq_api_key": "gsk-abc",
+        "groq_summary_model": "invalid-model",
+    }
+
+    mock_response = MagicMock()
+    mock_response.headers = {}
+    mock_response.status_code = 404
+    body = {"error": {"message": "model not found", "code": "model_not_found"}}
+    err = APIStatusError("not found", response=mock_response, body=body)
+    client = MagicMock()
+    client.chat.completions.create.side_effect = err
+    monkeypatch.setattr(summarize, "OpenAI", lambda **k: client)
+
+    with pytest.raises(APIStatusError):
+        summarize.call_summary_provider("test", cfg)

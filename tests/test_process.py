@@ -105,3 +105,96 @@ class TestProcessVideoSidecar:
         ]
         assert len(invalid_events) == 1
         assert "unknown key 'foo'" in invalid_events[0]["details"]
+
+
+class TestDeriveTopicFromTranscript:
+    def test_extracts_first_words_from_transcript_lines(self):
+        from src.process import derive_topic_from_transcript
+
+        transcript = (
+            "[00:00] SPEAKER_00: Hello.\n"
+            "[00:05] SPEAKER_00: Thanks for joining the release process meeting.\n"
+        )
+        topic = derive_topic_from_transcript(transcript)
+        assert topic.startswith("hello-thanks-for-joining")
+
+    def test_skips_timestamp_and_speaker_prefix(self):
+        from src.process import derive_topic_from_transcript
+
+        transcript = "[12:34] SPEAKER_01: sprint review discussion today\n"
+        topic = derive_topic_from_transcript(transcript)
+        assert "speaker_01" not in topic
+        assert "12" not in topic
+        assert topic.startswith("sprint-review-discussion")
+
+    def test_handles_cyrillic_with_translit(self):
+        from src.process import derive_topic_from_transcript
+
+        transcript = "[00:00] SPEAKER_00: Привет всем участникам встречи\n"
+        topic = derive_topic_from_transcript(transcript)
+        assert topic == "privet-vsem-uchastnikam-vstrechi"
+
+    def test_empty_transcript_returns_meeting(self):
+        from src.process import derive_topic_from_transcript
+        assert derive_topic_from_transcript("") == "meeting"
+
+    def test_only_punctuation_returns_meeting(self):
+        from src.process import derive_topic_from_transcript
+        assert derive_topic_from_transcript("[00:00] SPEAKER_00: ...\n") == "meeting"
+
+
+class TestSummaryFailureFallback:
+    def test_summary_failure_uses_transcript_topic_and_notifies(
+        self, fresh_db, tmp_path, monkeypatch
+    ):
+        """When generate_summary raises non-rate-limit error: fallback topic + summary_failed event."""
+        from src import process
+        importlib.reload(process)
+
+        out = tmp_path / "output"
+        out.mkdir()
+        monkeypatch.setenv("OUTPUT_DIR", str(out))
+        monkeypatch.setenv("HF_TOKEN", "hf_test")
+        monkeypatch.setenv("SUMMARY_BACKEND", "groq")
+        monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+
+        video_path = _make_video(tmp_path)
+
+        def fake_transcribe(path, cfg, video_id=None):
+            return {
+                "segments": [
+                    {
+                        "start": 0.0,
+                        "end": 5.0,
+                        "speaker": "SPEAKER_00",
+                        "text": "release process walkthrough demo today",
+                        "words": [],
+                    }
+                ]
+            }
+
+        def fake_summary(transcript, cfg):
+            raise RuntimeError("Groq API down")
+
+        events: list[tuple] = []
+
+        def spy_notify(event_type, **kwargs):
+            events.append((event_type, kwargs))
+
+        monkeypatch.setattr(process, "transcribe", fake_transcribe)
+        monkeypatch.setattr(process, "generate_summary", fake_summary)
+        monkeypatch.setattr(process, "notify_event", spy_notify)
+
+        process.process_video(str(video_path))
+
+        summary_files = list(out.rglob("*-summary.md"))
+        assert len(summary_files) == 1
+        body = summary_files[0].read_text()
+        assert "release-process-walkthrough" in summary_files[0].parent.name
+        assert "Summary unavailable" in body
+        assert "Groq API down" in body
+        assert "meetscribe resummarize" in body
+
+        failed = [e for e in events if e[0] == "summary_failed"]
+        assert len(failed) == 1
+        assert failed[0][1]["backend"] == "groq"

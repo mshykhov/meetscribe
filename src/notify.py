@@ -30,6 +30,7 @@ _RULES: dict[str, _Rule] = {
     "invalid":           _Rule("Basso", "Пропущен битый/короткий файл: {name}", "parent_dir"),
     "failed":            _Rule("Basso", "ОШИБКА: {name}", "parent_dir"),
     "rate_limited":      _Rule("Funk",  "Rate-limited: {backend} ({retry_after}s)", "watch_dir"),
+    "summary_failed":    _Rule("Funk",  "Summary не сгенерирован ({backend}): {name}", "output_md"),
     "done":              _Rule("Glass", "Готово: {name}", "output_md"),
 }
 

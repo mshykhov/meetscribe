@@ -12,9 +12,29 @@ from __future__ import annotations
 import subprocess
 import time
 
-from openai import OpenAI, APIConnectionError, APITimeoutError, RateLimitError
+from openai import (
+    OpenAI,
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    RateLimitError,
+)
 
 from src.openai_transcribe import RateLimitedError, _parse_retry_after
+
+
+# Groq returns HTTP 413 with body.error.code='rate_limit_exceeded' for TPM throttling.
+# TPM bucket resets every 60 seconds.
+TPM_RATE_LIMIT_DEFAULT_RETRY_SEC = 60
+
+
+def _is_tpm_rate_limit(err: APIStatusError) -> bool:
+    body = getattr(err, "body", None)
+    if isinstance(body, dict):
+        err_obj = body.get("error")
+        if isinstance(err_obj, dict) and err_obj.get("code") == "rate_limit_exceeded":
+            return True
+    return getattr(err, "code", None) == "rate_limit_exceeded"
 
 
 _PROVIDERS: dict[str, dict] = {
@@ -102,6 +122,20 @@ def _call_openai_chat(prompt: str, backend: str, cfg: dict, timeout: int) -> str
                 headers = getattr(resp, "headers", None) or {}
                 retry_after_header = headers.get("retry-after") or headers.get("Retry-After")
             retry_after = _parse_retry_after(retry_after_header)
+            raise RateLimitedError(backend, retry_after, str(e)[:200]) from e
+        except APIStatusError as e:
+            if not _is_tpm_rate_limit(e):
+                raise
+            retry_after_header = None
+            resp = getattr(e, "response", None)
+            if resp is not None:
+                headers = getattr(resp, "headers", None) or {}
+                retry_after_header = headers.get("retry-after") or headers.get("Retry-After")
+            retry_after = (
+                _parse_retry_after(retry_after_header)
+                if retry_after_header
+                else TPM_RATE_LIMIT_DEFAULT_RETRY_SEC
+            )
             raise RateLimitedError(backend, retry_after, str(e)[:200]) from e
         except (ConnectionError, TimeoutError, APIConnectionError, APITimeoutError) as e:
             last_err = e
